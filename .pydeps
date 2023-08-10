@@ -1,0 +1,7 @@
+[pydeps]
+max_bacon = 4
+cluster=True
+verbose = 0
+pylib=False
+keep_target_cluster=True
+exclude=gidvenv.utility
