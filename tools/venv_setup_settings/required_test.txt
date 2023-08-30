@@ -2,10 +2,8 @@ faker
 pytest
 pytest-cov
 pytest-datafiles
-pytest-html-reporter
 pytest-lazy-fixture
 pytest-metadata
-pytest-qt
 pytest-random-order
 pytest-stress
 pytest-testdirectory

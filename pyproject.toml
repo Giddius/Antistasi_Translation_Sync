@@ -13,10 +13,10 @@ requires-python = ">=3.11"
 dependencies = ["python-dotenv", "httpx~=0.24"]
 
 [project.urls]
-# Source = ""
+Source = "https://github.com/Giddius/Antistasi_Translation_Sync"
 
 [project.scripts]
-
+antistasi-translation-sync = "antistasi_translation_sync.__main__:main"
 
 [project.optional-dependencies]
 
@@ -77,15 +77,9 @@ ignore_init_module_imports = false
 
 
 [tool.pytest.ini_options]
-addopts = "-rA -vv --durations=10 --capture=tee-sys --show-capture=all --color=auto --code-highlight=yes --cov=gidapptools --cov-report html --html-report=./tools/reports/pytest_report --title='PYTEST REPORT'"
+addopts = "-rA -vv --durations=10 --capture=tee-sys --show-capture=all --color=auto --code-highlight=yes --no-cov"
 norecursedirs = "manual_*"
 
-[tool.coverage.report]
-omit = ["**/__init__.py"]
-exclude_lines = ["if __name__ == .__main__.:", "def __rich__", "def __repr__"]
-
-[tool.coverage.html]
-directory = "tools/reports/coverage/html"
 
 [tool.mypy]
 

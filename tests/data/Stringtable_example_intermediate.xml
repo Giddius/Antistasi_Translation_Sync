@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project name="A3-Antistasi">
+  <Package name="A3-Antistasi Intermediate">
+    <Container name="A3A_EXAMPLE_CONTAINER">
+      <Key ID="STR_A3A_EXAMPLE_KEY">
+        <Original>Hello World!</Original>
+        <French>Bonjour le monde</French>
+        <Russian>Привет, мир</Russian>
+        <German>Hallo Welt</German>
+        <Czech>Ahoj světe</Czech>
+        <Korean>헬로 월드</Korean>
+        <Italian>Ciao mondo</Italian>
+        <Portuguese>Olá Mundo</Portuguese>
+        <Spanish>Hola Mundo</Spanish>
+        <Japanese>こんにちは世界</Japanese>
+        <Polish>Witaj świecie</Polish>
+      </Key>
+    </Container>
+    <Container name="A3A_SECOND_EXAMPLE_CONTAINER">
+      <Key ID="STR_A3A_SECOND_EXAMPLE_KEY">
+        <Original>My foo is your bar</Original>
+      </Key>
+      <Key ID="STR_A3A_EMPTY_EXAMPLE_KEY">
+      </Key>
+    </Container>
+    <Container name="A3A_EMPTY_EXAMPLE_CONTAINER">
+    </Container>
+  </Package>
+</Project>

@@ -33,6 +33,19 @@ THIS_FILE_DIR = Path(__file__).parent.absolute()
 
 # endregion [Constants]
 
+
+class AntistasiTranslationSyncError(BaseException):
+    ...
+
+
+class StringtableError(AntistasiTranslationSyncError):
+    ...
+
+
+class UnremoveableEntryError(StringtableError):
+    ...
+
+
 # region [Main_Exec]
 if __name__ == '__main__':
     pass
