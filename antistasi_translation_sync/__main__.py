@@ -46,7 +46,7 @@ THIS_FILE_DIR = Path(__file__).parent.absolute()
 IN_FILE = THIS_FILE_DIR.joinpath("Stringtable_example_complex.xml")
 
 
-dotenv.load_dotenv(dotenv.find_dotenv("translation_automation.env"))
+# dotenv.load_dotenv(dotenv.find_dotenv("translation_automation.env"))
 
 
 class Syncer:
