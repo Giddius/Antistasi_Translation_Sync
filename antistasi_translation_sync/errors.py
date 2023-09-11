@@ -7,11 +7,8 @@ Soon.
 # region [Imports]
 
 # * Standard Library Imports ---------------------------------------------------------------------------->
-import os
-from typing import TYPE_CHECKING, Any, Union, Literal, Hashable, Iterable, Optional
+
 from pathlib import Path
-from datetime import timezone, datetime
-from contextlib import contextmanager
 
 # * Type-Checking Imports --------------------------------------------------------------------------------->
 
@@ -46,9 +43,47 @@ class UnremoveableEntryError(StringtableError):
     ...
 
 
+class StringtableContainerError(StringtableError):
+    ...
+
+
+class DuplicateContainerError(StringtableContainerError):
+    ...
+
+
+class StringtableKeyError(StringtableError):
+    ...
+
+
+class DuplicateKeyError(StringtableKeyError):
+    ...
+
+
+class StringtableEntryError(StringtableError):
+    ...
+
+
+class DuplicateEntryError(StringtableEntryError):
+    ...
+
+
+class TolgeeError(AntistasiTranslationSyncError):
+    ...
+
+
+class NoTokenFoundError(TolgeeError):
+    ...
+
+
+class TolgeeProjectError(TolgeeError):
+    ...
+
+
 # region [Main_Exec]
 if __name__ == '__main__':
-    pass
+    import inspect
 
+    import pp
+    pp(inspect.getmro(AntistasiTranslationSyncError))
 
 # endregion [Main_Exec]
