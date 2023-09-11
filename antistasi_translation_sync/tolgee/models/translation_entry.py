@@ -267,6 +267,7 @@ class TranslationEntry:
                         "translations": {self.language.tag: stringtable_entry.text}}
 
         response = self.client.client.post("/translations", json=request_data)
+        response.close()
 
         return True
 

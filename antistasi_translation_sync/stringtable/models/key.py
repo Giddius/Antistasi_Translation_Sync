@@ -60,7 +60,7 @@ else:
 
 from .language import ArmaLanguage, LanguageLike
 from .entry import StringTableEntry
-from antistasi_translation_sync.errors import UnremoveableEntryError
+from antistasi_translation_sync.errors import UnremoveableEntryError, DuplicateEntryError
 if TYPE_CHECKING:
     from antistasi_translation_sync.stringtable.models.container import StringTableContainer
     from antistasi_translation_sync.stringtable.models.stringtable_obj import StringTable
@@ -88,6 +88,10 @@ _GET_DEFAULT_TYPE = TypeVar("_GET_DEFAULT_TYPE", object, None)
 
 class StringTableKey:
 
+    __slots__ = ("container",
+                 "id_value",
+                 "entry_map")
+
     def __init__(self,
                  id_value: str) -> None:
         self.container: "StringTableContainer" = None
@@ -108,6 +112,9 @@ class StringTableKey:
         if entry is not None:
             self.remove_entry(entry)
 
+    def remove_all_not_original_entries(self) -> None:
+        self.entry_map = {k: v for k, v in self.entry_map.items() if v.language is ArmaLanguage.ORIGINAL}
+
     def __getitem__(self, language: "LanguageLike") -> StringTableEntry:
         return self.entry_map[ArmaLanguage(language)]
 
@@ -119,7 +126,10 @@ class StringTableKey:
 
     @property
     def original_entry(self) -> Union[StringTableEntry, None]:
-        return self.get(ArmaLanguage.ORIGINAL, default=None)
+        _out = self.get(ArmaLanguage.ORIGINAL, default=None)
+        if _out is None:
+            print(f"{self!r}  {self.entries!r}  {self.entry_map!r}")
+        return _out
 
     @property
     def original_text(self) -> Union[str, None]:
@@ -150,6 +160,8 @@ class StringTableKey:
         self.container = container
 
     def add_entry(self, entry: "StringTableEntry") -> None:
+        if entry.language in self.entry_map:
+            raise DuplicateEntryError(entry, self, self.container, self.container.string_table)
         entry.set_key(self)
         self.entry_map[entry.language] = entry
 
@@ -163,10 +175,10 @@ class StringTableKey:
             return 0
         return list(ArmaLanguage).index(entry.language)
 
-    def as_text(self) -> str:
-        indent_value = (" " * 2) * 3
+    def as_text(self, indentation: int = 2) -> str:
+        indent_value = (" " * indentation) * 3
         text = f'{indent_value}<Key ID="{self.name}">\n'
-        text += '\n'.join(i.as_text() for i in sorted(self.entries, key=self._sort_func_for_text))
+        text += '\n'.join(i.as_text(indentation) for i in sorted(self.entries, key=self._sort_func_for_text))
         text += f"\n{indent_value}</Key>"
         return text
 

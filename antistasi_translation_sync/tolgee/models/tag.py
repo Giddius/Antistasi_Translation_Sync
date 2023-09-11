@@ -58,6 +58,7 @@ else:
 
 if TYPE_CHECKING:
     from ..client import TolgeeClient
+    from .project import Project
 
 # endregion [Imports]
 
@@ -80,9 +81,10 @@ THIS_FILE_DIR = Path(__file__).parent.absolute()
 
 @dataclasses.dataclass(frozen=True, slots=True)
 class Tag:
-    tag_id: int = dataclasses.field()
-    name: str = dataclasses.field()
-    client: Union["TolgeeClient", None] = dataclasses.field(default=None, repr=False, hash=False)
+    tag_id: int = dataclasses.field(hash=True, compare=True)
+    name: str = dataclasses.field(compare=True)
+    project: "Project" = dataclasses.field()
+    client: Union["TolgeeClient", None] = dataclasses.field(default=None, repr=False, hash=False, compare=False)
 
     @classmethod
     def from_response_data(cls,

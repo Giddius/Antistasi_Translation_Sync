@@ -1,3 +1,5 @@
+
+from .general_project_data import GeneralProjectData
 from .language import Language
 
 from .project_info import ProjectInfo

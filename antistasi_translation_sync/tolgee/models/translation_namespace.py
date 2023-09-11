@@ -121,6 +121,13 @@ class TranslationNamespace:
             raise RuntimeError(f"key {key.name!r} already is in {self!r}.")
         self._key_map[key.name] = key
 
+    def remove_key(self, key: Union[str, "TranslationKey"]) -> None:
+        if isinstance(key, str):
+            del self._key_map[key]
+
+        else:
+            del self._key_map[key.name]
+
     def __getitem__(self, name: str) -> "TranslationKey":
         return self._key_map[name]
 

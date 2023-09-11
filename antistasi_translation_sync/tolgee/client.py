@@ -60,10 +60,10 @@ import httpx
 from types import MappingProxyType, TracebackType
 from .rate_limiter import get_rate_limiter, RateLimit
 
-from .models import Language, ProjectInfo, TranslationNamespace, TranslationKey, TranslationEntry, MachineTranslationProvider, EntryState, Tag, Project
+from .models import Language, ProjectInfo, TranslationNamespace, TranslationKey, TranslationEntry, MachineTranslationProvider, EntryState, Tag, Project, GeneralProjectData
 from .retrier import ResponsePaginator, Retrier
 if TYPE_CHECKING:
-    from ..stringtable import StringTableEntry
+    from ..stringtable import StringTableEntry, LanguageLike
 
 # endregion [Imports]
 
@@ -82,6 +82,54 @@ if TYPE_CHECKING:
 THIS_FILE_DIR = Path(__file__).parent.absolute()
 
 # endregion [Constants]
+
+
+def get_all_projects_data_from_access_token(in_base_url: Union[str, httpx.URL], access_token: str) -> tuple["GeneralProjectData"]:
+    TO_REMOVE_PROJECT_DATA_KEYS = {"organizationOwner", "organizationRole", "directPermission", "computedPermission", "baseLanguage"}
+
+    full_url = httpx.URL(in_base_url).join("v2/projects")
+
+    params = {"page": 0}
+    headers = {"X-API-Key": access_token}
+
+    raw_projects_data = []
+
+    while True:
+        response = httpx.get(full_url, headers=headers, params=params)
+        response.raise_for_status()
+
+        response_data = response.json()
+        for _project_data in response_data["_embedded"]["projects"]:
+            _mod_project_data = {k: v for k, v in _project_data.items() if k not in TO_REMOVE_PROJECT_DATA_KEYS}
+            _project_id = _mod_project_data.pop("id")
+            _project_url = httpx.URL(_mod_project_data.pop("_links")["self"]["href"], scheme="https")
+            _project_description = _mod_project_data["description"] or ""
+
+            if _mod_project_data["avatar"] is not None:
+                _avatar_url = str(httpx.URL(_project_url).join(_mod_project_data["avatar"]["large"]))
+                _avatar_thumbnail_url = str(httpx.URL(_project_url).join(_mod_project_data["avatar"]["thumbnail"]))
+
+            else:
+                _avatar_url = None
+                _avatar_thumbnail_url = None
+
+            raw_projects_data.append(GeneralProjectData(project_id=_project_id,
+                                                        name=_mod_project_data["name"],
+                                                        slug=_mod_project_data["slug"],
+                                                        project_url=_project_url,
+                                                        description=_project_description,
+                                                        avatar_url=_avatar_url,
+                                                        avatar_thumbnail_url=_avatar_thumbnail_url))
+
+        max_pages = response_data["page"]["totalPages"]
+        current_page = response_data["page"]["number"]
+
+        params["page"] += 1
+
+        if params["page"] >= max_pages:
+            break
+
+    return raw_projects_data
 
 
 class TolgeeClient:
@@ -125,6 +173,7 @@ class TolgeeClient:
             raise e
 
     def on_request(self, request: httpx.Request):
+        # print(f"{request.url.raw=}")
 
         self.rate_limit_spec.consume()
 
@@ -171,8 +220,7 @@ class TolgeeClient:
                 key = TranslationKey(key_id=data["keyId"],
                                      name=data["keyName"],
                                      namespace=namespace,
-                                     tags=[Tag(tag_id=i["id"],
-                                               name=i["name"], client=self) for i in data["keyTags"]],
+                                     tags=[project.get_or_create_tag(tag_id=i["id"], tag_name=i["name"]) for i in data["keyTags"]],
                                      client=self)
                 namespace.add_key(key)
 
@@ -183,7 +231,7 @@ class TolgeeClient:
 
                     translation = TranslationEntry(entry_id=translation_data["id"],
                                                    key=key,
-                                                   language=project.get_language_by_tag(language_tag),
+                                                   language=project.get_language(language_tag),
                                                    text=translation_data["text"],
                                                    state=translation_data["state"],
                                                    outdated=translation_data["outdated"],
@@ -202,14 +250,6 @@ class TolgeeClient:
                 params["cursor"] = cursor
             except KeyError:
                 break
-
-    def get_all_tags(self) -> Generator["Tag", None, None]:
-        params = {"page": 0}
-        response = self.client.get("/tags", params=params)
-
-        for _response_data in ResponsePaginator(response=response, client=self.client):
-            for item in _response_data["tags"]:
-                yield Tag.from_response_data(client=self, **item)
 
     def get_available_languages(self) -> tuple[Language]:
         data = []
@@ -230,234 +270,89 @@ class TolgeeClient:
 
     def set_tag_for_key(self, key: "TranslationKey", tag_name: str) -> "Tag":
         response = self.client.put(f"/keys/{key.key_id}/tags", json={"name": tag_name})
-
-        tag = Tag.from_response_data(response_data=response.json())
+        response_data = response.json()
+        tag = key.project.get_or_create_tag(tag_id=response_data["id"], tag_name=response_data["name"])
         return tag
 
     def remove_tag_for_key(self, key: "TranslationKey", tag: "Tag") -> None:
         response = self.client.delete(f"/keys/{key.key_id}/tags/{tag.tag_id}")
+        response.close()
 
-    def get_all_translations(self,
-                             exclude_default_language: bool = False,
-                             exclude_outdated: bool = False,
-                             exclude_deleted: bool = True) -> Generator[TranslationEntry, None, None]:
+    def refresh_key(self, key: "TranslationKey") -> None:
 
-        if exclude_default_language is True:
-            languages_tags = [l.tag for l in self.languages if l.is_default is False]
-        else:
-            languages_tags = [l.tag for l in self.languages]
-
-        params = {"size": 250,
-                  "languages": languages_tags}
-
-        if exclude_outdated is True:
-            params["filterNotOutdatedLanguage"] = [l.tag for l in self.languages if l.is_default is False]
+        params = {"filterKeyName": [key.name],
+                  "languages": [language.tag for language in key.project.languages],
+                  "size": 50}
 
         response = self.client.get("/translations", params=params)
 
-        for response_data in ResponsePaginator(response=response, client=self.client):
-            data = response_data["keys"]
+        new_data = response.json()["_embedded"]["keys"]
 
-            for item in data:
-                if exclude_deleted and "DELETED" in {i["name"] for i in item["keyTags"]}:
-                    continue
-                print(f'{item["contextPresent"]=}')
-                for language, value in item["translations"].items():
+        new_key_data = next((data for data in new_data if data["keyId"] == key.key_id), None)
 
-                    language = self.project_info.get_language_by_tag(language)
-                    yield TranslationEntry.from_response_data(client=self, language=language, name_space=item["keyNamespace"],
-                                                              key_name=item["keyName"], **value)
+        if new_key_data is None:
+            raise RuntimeError(f"Unable to update {key!r} from {self.project!r}.")
 
-    def _get_entries_for_key(self, key: "TranslationKey") -> Generator[TranslationEntry, None, None]:
-        params = {"filterNamespace": [key.namespace],
-                  "filterKeyName": [key.name],
-                  "languages": [l.tag for l in self.languages]}
+        key._tags = frozenset([key.project.get_or_create_tag(tag_id=i["id"], tag_name=["name"]) for i in new_key_data["keyTags"]])
+        key._entry_map = {}
+        for language_tag, translation_data in new_key_data["translations"].items():
 
-        while True:
-            response = self.client.get("/translations", params=params)
+            if not translation_data["text"]:
+                continue
 
-            response_data = response.json()
+            translation = TranslationEntry(entry_id=translation_data["id"],
+                                           key=key,
+                                           language=key.project.get_language(language_tag),
+                                           text=translation_data["text"],
+                                           state=translation_data["state"],
+                                           outdated=translation_data["outdated"],
+                                           auto=translation_data["auto"],
+                                           mtProvider=translation_data["mtProvider"],
+                                           commentCount=translation_data["commentCount"],
+                                           unresolvedCommentCount=translation_data["unresolvedCommentCount"],
+                                           fromTranslationMemory=translation_data["fromTranslationMemory"],
+                                           client=self)
+            key.add_entry(translation)
 
-            embedded_data = response_data.get("_embedded", None)
-            if embedded_data is None:
-                break
+    def insert_translation_for_new_key(self, namespace_name: str, key_name: str, language: "LanguageLike", text: str) -> "TranslationKey":
+        language = self.project.get_language(language)
 
-            data = embedded_data["keys"]
+        assert language.name == "Original"
 
-            for item in data:
+        request_data = {"key": key_name,
+                        "namespace": namespace_name,
+                        "translations": {language.tag: text}}
 
-                for language, value in item["translations"].items():
+        response = self.client.post("/translations", json=request_data)
 
-                    language = self.project_info.get_language_by_tag(language)
+        new_data = response.json()
 
-                    entry = TranslationEntry.from_response_data(client=self, language=language, name_space=item["keyNamespace"],
-                                                                key_name=item["keyName"], **value)
-                    if entry.text is not None:
-                        yield entry
-            next_cursor = response_data["nextCursor"]
-            if next_cursor is not None:
-                params["cursor"] = next_cursor
-            else:
-                break
+        namespace = self.project.get_or_create_namespace(name=new_data["keyNamespace"])
+        key = TranslationKey(key_id=new_data["keyId"],
+                             name=new_data["keyName"],
+                             namespace=namespace,
+                             tags=[],
+                             client=self)
+        namespace.add_key(key)
 
-    def get_translation(self, name_space: str, key: str, language: Language) -> Union[TranslationEntry, None]:
+        return key
 
-        query = {"filterNamespace": [name_space],
-                 "filterKeyName": [key],
-                 "languages": [language.tag]}
-        response = self.client.get("/translations", params=query)
+    def get_namespace_id_by_name(self, namespace_name: str) -> int:
+        response = self.client.get(f"/namespace-by-name/{namespace_name}")
 
-        try:
-            return TranslationEntry.from_response_data(name_space=name_space, key_name=key, language=language, client=self, **response.json()["_embedded"]["keys"][0]["translations"][language.tag])
-        except KeyError:
-            return None
+        return response.json()["id"]
 
-    def get_all_namespaces(self):
-        params = {"page": 0}
+    def update_namespace_for_key(self, key: "TranslationKey", new_namespace_name: str) -> None:
 
-        while True:
-            response = self.client.get("/namespaces", params=params)
-            response_data = response.json()
-            yield from (TranslationNamespace.from_response_data(client=self, **i) for i in response_data["_embedded"]["namespaces"])
+        old_namespace = key.namespace
+        response = self.client.put(f"/keys/{key.key_id}", json={"name": key.name, "namespace": new_namespace_name})
 
-            curr_page = response_data["page"]["number"]
-            total_pages = response_data["page"]["totalPages"]
+        new_namespace = key.project.get_or_create_namespace(name=response.json()["namespace"])
 
-            if (curr_page + 1) == total_pages:
-                break
-
-            params["page"] += 1
-
-    def get_all_keys(self) -> Generator["TranslationKey", None, None]:
-
-        params = {"page": 0}
-        response = self.client.get("/keys", params=params)
-
-        for _response_data in ResponsePaginator(response=response, client=self.client):
-            for item in _response_data["keys"]:
-
-                yield TranslationKey.from_response_data(client=self, **item)
-
-    def get_translations_for_language(self,
-                                      language: Language) -> Generator[TranslationEntry, None, None]:
-
-        params = {"size": 250,
-                  "languages": [language.tag]}
-
-        while True:
-
-            response = self.client.get("/translations", params=params)
-
-            response_data = response.json()
-
-            embedded_data = response_data.get("_embedded", None)
-            if embedded_data is None:
-                break
-
-            data = embedded_data["keys"]
-
-            for item in data:
-
-                for language, value in item["translations"].items():
-
-                    language = self.project_info.get_language_by_tag(language)
-                    yield TranslationEntry.from_response_data(client=self, language=language, name_space=item["keyNamespace"],
-                                                              key_name=item["keyName"], **value)
-
-            next_cursor = response_data["nextCursor"]
-            if next_cursor is not None:
-                params["cursor"] = next_cursor
-            else:
-                break
-
-    def get_all_translations(self,
-                             exclude_default_language: bool = False,
-                             exclude_outdated: bool = False,
-                             exclude_deleted: bool = True) -> Generator[TranslationEntry, None, None]:
-
-        if exclude_default_language is True:
-            languages_tags = [l.tag for l in self.languages if l.is_default is False]
-        else:
-            languages_tags = [l.tag for l in self.languages]
-
-        params = {"languages": languages_tags}
-
-        if exclude_outdated is True:
-            params["filterNotOutdatedLanguage"] = [l.tag for l in self.languages if l.is_default is False]
-
-        response = self.client.get("/translations", params=params)
-
-        for response_data in ResponsePaginator(response=response, client=self.client):
-            data = response_data["keys"]
-
-            for item in data:
-                if exclude_deleted and "DELETED" in {i["name"] for i in item["keyTags"]}:
-                    continue
-                print(f'{item["contextPresent"]=}')
-                for language, value in item["translations"].items():
-
-                    language = self.project_info.get_language_by_tag(language)
-                    yield TranslationEntry.from_response_data(client=self, language=language, name_space=item["keyNamespace"],
-                                                              key_name=item["keyName"], **value)
-
-    def update_translations(self,
-                            name_space: str,
-                            key: str,
-                            entry_values: Mapping["Language", str]):
-
-        data = {"key": key,
-                "namespace": name_space,
-                "translations": {language.tag: value for language, value in entry_values.items()},
-                "languagesToReturn": [l.tag for l in entry_values.keys()]}
-        response = self.client.post(f"/translations", json=data).json()
-        for raw_lang, values in response["translations"].items():
-            item = TranslationEntry.from_response_data(name_space=name_space, key_name=key, language=self.project_info.get_language_by_tag(raw_lang), client=self, **values)
-            self.update_in_entry_map(item)
-        return response
-
-    def update_namespace_for_key(self, key_name: str, new_namespace: str) -> None:
-        key_id = next((k for k in self.get_all_keys() if k.name == key_name)).key_id
-
-        response = self.client.put(f"/keys/{key_id}", json={"name": key_name, "namespace": new_namespace})
-        del self._entry_map[key_name]
-
-        query = {"filterNamespace": [new_namespace],
-                 "filterKeyName": [key_name],
-                 "languages": [l.tag for l in self.languages]}
-
-        response = self.client.get("/translations", params=query)
-        response_data = response.json()["_embedded"]["keys"][0]["translations"]
-        for raw_lang, entry in response_data.items():
-            if key_name not in self._entry_map:
-                self._entry_map[key_name] = {}
-
-            language_item = self.project_info.get_language_by_tag(raw_lang)
-            entry_item = TranslationEntry.from_response_data(name_space=new_namespace, key_name=key_name, language=language_item, client=self, **entry)
-            self._entry_map[key_name][language_item] = entry_item
-            print(f"Update {entry_item!r} in key_map", flush=True)
-
-    def update_translation_from_stringtable_entry(self, entry: "StringTableEntry") -> None:
-        try:
-            existing_item = self.entry_map[entry.key_name][self.project_info.language_from_arma_language(entry.language)]
-        except KeyError:
-            existing_item = None
-
-        if existing_item is not None and existing_item.text == entry.text and existing_item.name_space == entry.container_name:
-            return
-
-        if existing_item is not None and existing_item.name_space != entry.container_name:
-            self.update_namespace_for_key(key_name=entry.key_name, new_namespace=entry.container_name)
-
-        name_space = entry.container_name
-        key_name = entry.key_name
-        values = {self.project_info.language_from_arma_language(entry.language): entry.text}
-        self.update_translations(name_space=name_space, key=key_name, entry_values=values)
-        print(f"updated {entry}.")
-
-    def get_daily_activity(self) -> dict[str, int]:
-        response = self.client.get("/stats/daily-activity")
-
-        return response.json()
+        old_namespace.remove_key(key)
+        new_namespace.add_key(key)
+        key._namespace = new_namespace
+        key.refresh()
 
     def connect(self, _from_enter: bool = False) -> Self:
         self.client = self._create_client()
@@ -466,7 +361,6 @@ class TolgeeClient:
             self.client.__enter__()
 
         self.project = Project(client=self)
-        # self.project.setup()
 
         return self
 
@@ -477,6 +371,7 @@ class TolgeeClient:
 
     def __enter__(self) -> Self:
         self.connect(_from_enter=True)
+
         return self
 
     def __exit__(self,

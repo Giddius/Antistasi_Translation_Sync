@@ -57,7 +57,7 @@ else:
     from typing_extensions import Self
 
 if TYPE_CHECKING:
-    ...
+    from antistasi_translation_sync.configuration import Config
 
 # endregion [Imports]
 
@@ -83,8 +83,11 @@ class BaseAction(ABC):
     _name: str = None
     _description: str = None
 
-    def __init__(self) -> None:
-        super().__init__()
+    def __init__(self,
+                 stringtable_file: Path,
+                 config: "Config") -> None:
+        self.stringtable_file = stringtable_file
+        self.config = config
 
     @classmethod
     @property

@@ -45,6 +45,8 @@ def test_simple_containers(parsed_stringtable: StringTable, expected_result: "St
 
     assert len(new_stringtable.containers) == (expected_result.amount_containers + 1)
 
+    assert len(parsed_stringtable.containers) == (expected_result.amount_containers)
+
 
 @pytest.mark.parametrize(["parsed_stringtable", "expected_result"], test_stringtable_obj_params)
 def test_simple_keys(parsed_stringtable: StringTable, expected_result: "StringtableObjExpectedResult"):
@@ -66,9 +68,8 @@ def test_simple_keys(parsed_stringtable: StringTable, expected_result: "Stringta
     assert all_key_names == expected_result.key_names
 
     for item in expected_result.example_keys:
-        ctx = nullcontext()
-        if item.error:
-            ctx = pytest.raises(item.error)
+
+        ctx = pytest.raises(item.error) if item.error else nullcontext()
         with ctx:
             key = parsed_stringtable.get_key(item.name)
             if item.language is ArmaLanguage.ORIGINAL:

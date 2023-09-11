@@ -59,7 +59,7 @@ if sys.version_info >= (3, 11):
 else:
     from typing_extensions import Self
 
-
+from antistasi_translation_sync.errors import DuplicateKeyError, DuplicateContainerError
 from .language import ArmaLanguage, LanguageLike
 from .container import StringTableContainer
 if TYPE_CHECKING:
@@ -88,6 +88,11 @@ _GET_DEFAULT_TYPE = TypeVar("_GET_DEFAULT_TYPE", object, None)
 
 
 class StringTable:
+
+    __slots__ = ("project_name",
+                 "package_name",
+                 "header",
+                 "container_map")
 
     def __init__(self) -> None:
         self.project_name: Union[str, None] = None
@@ -151,6 +156,8 @@ class StringTable:
         return tuple(self.iter_keys())
 
     def add_container(self, container: "StringTableContainer") -> None:
+        if container.name in self.container_map:
+            raise DuplicateContainerError(container, self)
         container.set_string_table(self)
         self.container_map[container.name] = container
 
@@ -167,8 +174,8 @@ class StringTable:
     def __copy__(self) -> Self:
         cls = self.__class__
         result = cls.__new__(cls)
-        result.__dict__.update(self.__dict__)
-
+        for attr_name in self.__class__.__slots__:
+            setattr(result, getattr(self, attr_name))
         return result
 
     def copy(self) -> Self:
@@ -178,21 +185,21 @@ class StringTable:
         cls = self.__class__
         result = cls.__new__(cls)
         memo[id(self)] = result
-        for k, v in self.__dict__.items():
-            setattr(result, k, deepcopy(v, memo))
+        for attr_name in self.__class__.__slots__:
+            setattr(result, attr_name, deepcopy(getattr(self, attr_name), memo))
         return result
 
     def deepcopy(self) -> Self:
         return deepcopy(self)
 
-    def as_text(self) -> str:
+    def as_text(self, indentation: int = 2) -> str:
         text = ""
         if self.header is not None:
             text += self.header + "\n"
-        text_parts = [c.as_text() for c in sorted(self.containers, key=self._sort_func_for_text)]
+        text_parts = [c.as_text(indentation) for c in sorted(self.containers, key=self._sort_func_for_text)]
         if self.package_name is not None:
-            text_parts.insert(0, (" " * 2) + f'<Package name="{self.package_name}">')
-            text_parts.append((" " * 2) + "</Package>")
+            text_parts.insert(0, (" " * indentation) + f'<Package name="{self.package_name}">')
+            text_parts.append((" " * indentation) + "</Package>")
         if self.project_name is not None:
             text_parts.insert(0, f'<Project name="{self.project_name}">')
             text_parts.append("</Project>")

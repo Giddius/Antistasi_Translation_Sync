@@ -145,19 +145,34 @@ class TranslationKey:
         self._entry_map[entry.language] = entry
 
     def add_tag(self, tag_name: str) -> None:
+        if tag_name in {t.name for t in self.tags}:
+            return
         tag = self._client.set_tag_for_key(self, tag_name=tag_name)
-        self._tags = self._tags.union({tag})
+        self.refresh()
 
     def remove_tag(self, tag_name: str) -> None:
+        # if tag_name not in {t.name for t in self.tags}:
+        #     return
         tag = next((t for t in self.tags if t.name == tag_name), None)
         if tag is not None:
+            print(f"Removing tag {tag!r}")
             self._client.remove_tag_for_key(key=self, tag=tag)
+            self.refresh()
 
     def set_deleted(self) -> None:
         self.add_tag("DELETED")
 
+    def unset_deleted(self) -> None:
+        self.remove_tag("DELETED")
+
+    def refresh(self) -> None:
+        self._client.refresh_key(self)
+
+    def change_namespace(self, new_namespace_name: str) -> None:
+        self._client.update_namespace_for_key(self, new_namespace_name=new_namespace_name)
+
     def __getitem__(self, language: "LanguageLike") -> "TranslationEntry":
-        language = self._client.project.get_language_by_name(language.language_name)
+        language = self.project.get_language(language.language_name)
         return self._entry_map[language]
 
     def __eq__(self, other: object) -> bool:

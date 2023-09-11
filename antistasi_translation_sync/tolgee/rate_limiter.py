@@ -51,6 +51,7 @@ from urllib.parse import urlparse
 from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor, Future, wait, as_completed, ALL_COMPLETED, FIRST_EXCEPTION, FIRST_COMPLETED
 from time import time
 from math import floor, ceil
+import atexit
 from threading import Lock, RLock
 from types import TracebackType
 if sys.version_info >= (3, 11):
@@ -106,7 +107,7 @@ class RateLimit:
         self._reset_seconds = reset_seconds
         self._rate_fractions = rate_fractions or 1
 
-        self._time_provider = time_provider or time
+        self._time_provider = time_provider or perf_counter
 
         self._bucket: int = 0
         self._start_time: float = None
@@ -118,7 +119,7 @@ class RateLimit:
         self._start_time = self._time_provider()
 
     def _get_sleep_time(self) -> float:
-        base_sleep_time = (self._reset_seconds / self._rate_fractions) * 1.02
+        base_sleep_time = (self._reset_seconds / self._rate_fractions) * 1.05
         used_time = self._time_provider() - self._start_time
 
         sleep_time = max((base_sleep_time - used_time), 0.00001)
@@ -137,15 +138,25 @@ class RateLimit:
         sleep(sleep_amount)
         self._refill_bucket()
 
+    def _random_sleep(self) -> None:
+        sleep_amount = (1.0 / (self._rate_fractions / 2)) * random.random()
+        sleep(sleep_amount)
+        # print(f"slept randomly for {sleep_amount:.4f}", flush=True)
+
     def consume(self) -> None:
         if self._random_sleep_on_consume is True:
-            sleep(random.random() / 2)
+            # sleep(random.random() / 2)
+            self._random_sleep()
         with self._consume_lock:
             self._bucket -= 1
             if self._bucket <= 0:
                 self._on_empty_bucket()
 
             return
+
+    def force_sleep(self) -> None:
+        with self._consume_lock:
+            self._on_empty_bucket()
 
     def __enter__(self) -> Self:
         self.consume()
@@ -158,14 +169,25 @@ class RateLimit:
         pass
 
 
-RATE_LIMIT_MANAGER: WeakValueDictionary[httpx.URL, RateLimit] = WeakValueDictionary()
+RATE_LIMIT_MANAGER: dict[httpx.URL, RateLimit] = {}
+
+
+def _sleep_max_sleep_seconds():
+    all_sleep_seconds = [rl._get_sleep_time() for rl in RATE_LIMIT_MANAGER.values()]
+    if all_sleep_seconds:
+        max_sleep_seconds = max(all_sleep_seconds)
+        print(f"sleeping for {max_sleep_seconds} on exit")
+        sleep(max_sleep_seconds)
+
+
+atexit.register(_sleep_max_sleep_seconds)
 
 
 def get_rate_limiter(base_url: httpx.URL) -> "RateLimit":
     try:
         return RATE_LIMIT_MANAGER[base_url]
     except KeyError:
-        rate_limit = RateLimit(300, 90, rate_fractions=10, random_sleep_on_consume=True)
+        rate_limit = RateLimit(300, 70.0, rate_fractions=10, random_sleep_on_consume=True)
         RATE_LIMIT_MANAGER[base_url] = rate_limit
 
         return rate_limit

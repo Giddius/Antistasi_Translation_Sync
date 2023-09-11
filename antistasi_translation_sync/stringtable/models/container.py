@@ -60,7 +60,7 @@ else:
     from typing_extensions import Self
 
 from .key import StringTableKey
-
+from antistasi_translation_sync.errors import DuplicateKeyError
 if TYPE_CHECKING:
 
     from antistasi_translation_sync.stringtable.models.entry import StringTableEntry
@@ -89,6 +89,10 @@ _GET_DEFAULT_TYPE = TypeVar("_GET_DEFAULT_TYPE", object, None)
 
 
 class StringTableContainer:
+
+    __slots__ = ("name",
+                 "string_table",
+                 "key_map")
 
     def __init__(self,
                  name: str) -> None:
@@ -130,6 +134,8 @@ class StringTableContainer:
         return instance
 
     def add_key(self, key: "StringTableKey") -> None:
+        if key.name in self.key_map:
+            raise DuplicateKeyError(key, self, self.string_table)
         key.set_container(self)
         self.key_map[key.name] = key
 
@@ -150,10 +156,10 @@ class StringTableContainer:
         parts = tuple(part.casefold() for part in key.name.split("_"))
         return parts
 
-    def as_text(self) -> str:
-        indent_value = (" " * 2) * 2
+    def as_text(self, indentation: int = 2) -> str:
+        indent_value = (" " * indentation) * 2
         text = f'{indent_value}<Container name="{self.name}">\n'
-        text += "\n".join(k.as_text() for k in sorted(self.keys, key=self._sort_func_for_text))
+        text += "\n".join(k.as_text(indentation) for k in sorted(self.keys, key=self._sort_func_for_text))
         text += f"\n{indent_value}</Container>"
         return text
 

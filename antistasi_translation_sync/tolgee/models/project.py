@@ -65,7 +65,7 @@ from .translation_key import TranslationKey
 from .translation_entry import TranslationEntry
 if TYPE_CHECKING:
     from ..client import TolgeeClient
-    from ...stringtable.models import ArmaLanguage, LanguageLike
+    from ...stringtable.models import ArmaLanguage, LanguageLike, StringTableEntry
 
 
 # endregion [Imports]
@@ -109,6 +109,8 @@ class NamespaceContainer:
         raise KeyError(f"No Namespace found for key {key!r} in {self!r}.")
 
     def add(self, namespace: "TranslationNamespace") -> None:
+        if namespace in self._namespaces:
+            raise RuntimeError(f"{namespace!r} already in {self!r}.")
         self._namespaces.append(namespace)
         self._id_map[namespace.namespace_id] = namespace
         self._name_map[namespace.name] = namespace
@@ -120,22 +122,68 @@ class NamespaceContainer:
             return default
 
 
+class TagContainer:
+
+    def __init__(self) -> None:
+        self._tags: list["Tag"] = []
+        self._name_map: dict[str, "Tag"] = {}
+        self._id_map: dict[int, "Tag"] = {}
+
+    def __getitem__(self, key: Union[str, int]) -> "Tag":
+        try:
+
+            if isinstance(key, int):
+                return self._id_map[key]
+            elif isinstance(key, str):
+                return self._name_map[key]
+
+        except KeyError:
+            pass
+
+        raise KeyError(f"No Tag found for key {key!r} in {self!r}.")
+
+    def add(self, tag: "Tag") -> None:
+        if Tag in self._tags:
+            raise RuntimeError(f"{tag!r} already in {self!r}.")
+        self._tags.append(tag)
+        self._id_map[tag.tag_id] = tag
+        self._name_map[tag.name] = tag
+
+    def get(self, key: Union[str, int], default: _GET_DEFAULT_TYPE = None) -> Union["Tag", _GET_DEFAULT_TYPE]:
+        try:
+            return self[key]
+        except KeyError:
+            return default
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class ChangeItem:
+    timestamp: datetime = dataclasses.field(hash=True, compare=True, repr=True)
+    item_path: str = dataclasses.field(hash=True, compare=True, repr=True)
+    action: str = dataclasses.field(hash=True, compare=True, repr=True)
+    comment: str = dataclasses.field(hash=False, compare=False, repr=False)
+
+
 class Project:
     __slots__ = ("client",
                  "project_info",
-                 "tags",
+                 "tag_container",
                  "namespace_container",
                  "language_map",
-                 "default_language")
+                 "default_language",
+                 "changes",
+                 "__weakref__")
 
     def __init__(self,
                  client: "TolgeeClient") -> None:
         self.client = client
         self.project_info: "ProjectInfo" = None
-        self.tags: set["Tag"] = set()
+        self.tag_container: TagContainer = TagContainer()
         self.namespace_container: NamespaceContainer = NamespaceContainer()
         self.language_map: dict[str, "Language"] = {}
         self.default_language: "Language" = None
+
+        self.changes: list[ChangeItem] = []
 
     @property
     def name(self) -> str:
@@ -154,6 +202,10 @@ class Project:
         return self.namespace_container._namespaces.copy()
 
     @property
+    def tags(self) -> list["Tag"]:
+        return self.tag_container._tags.copy()
+
+    @property
     def keys(self) -> list["TranslationKey"]:
         return list(chain(*[list(n._key_map.values()) for n in self.namespaces]))
 
@@ -167,7 +219,6 @@ class Project:
 
         self.language_map = {l.language_name.casefold(): l for l in self.client.get_available_languages()}
         self.default_language = next(l for l in self.languages if l.is_default)
-        self.tags = frozenset(self.client.get_all_tags())
 
         self.client._build_project_tree(self)
 
@@ -200,27 +251,73 @@ class Project:
 
         return language
 
+    def get_language(self, in_item: Union[str, "LanguageLike"]) -> "Language":
+
+        for language_get_method in (self.language_from_arma_language, self.get_language_by_tag, self.get_language_by_name):
+            try:
+                return language_get_method(in_item)
+            except (AttributeError, KeyError) as e:
+                # print(f"{e!r} error for method {language_get_method.__name__!r} and in_item {in_item!r}", flush=True)
+                pass
+
+        raise KeyError(f"No language found for {in_item!r} in {self!r}.")
+
+    def get_key_by_name(self, key_name: str) -> "TranslationKey":
+        return ChainMap(*[ns._key_map for ns in self.namespaces])[key_name]
+
     def add_namespace(self, namespace: "TranslationNamespace"):
         self.namespace_container.add(namespace)
+
+    def add_tag(self, tag: "Tag") -> None:
+        self.tag_container.add(tag)
 
     def __getitem__(self, key: Union[str, int]) -> "TranslationNamespace":
         return self.namespace_container[key]
 
-    def get_or_create_namespace(self, namespace_id: int, name: str) -> "TranslationNamespace":
+    def get_or_create_tag(self, tag_id: int, tag_name: str) -> "Tag":
         try:
-            return self[namespace_id]
+            return self.tag_container._id_map[tag_id]
         except KeyError:
+            tag = Tag(tag_id=tag_id, name=tag_name, client=self.client, project=self)
+            self.add_tag(tag=tag)
+            return tag
+
+    def get_or_create_namespace(self, name: str, namespace_id: int = None) -> "TranslationNamespace":
+        try:
+            return self[namespace_id] if namespace_id is not None else self[name]
+        except KeyError:
+            if namespace_id is None:
+                namespace_id = self.client.get_namespace_id_by_name(namespace_name=name)
             namespace = TranslationNamespace(namespace_id=namespace_id, name=name, project=self, client=self.client)
             self.add_namespace(namespace=namespace)
             return namespace
 
-    # def get_or_create_key(self, key_id: int, name: str, namespace: "TranslationNamespace", tags: Iterable["Tag"]) -> "TranslationKey":
-    #     try:
-    #         return namespace[name]
-    #     except KeyError:
-    #         key = TranslationKey(key_id=key_id, name=name, namespace=namespace, tags=tags, client=self.client)
-    #         namespace.add_key(key)
-    #         return key
+    def update_or_create_from_stringtable_entry(self, stringtable_entry: "StringTableEntry") -> bool:
+        try:
+            key = self.get_key_by_name(stringtable_entry.key_name)
+        except KeyError:
+            key = None
+
+        if key is None:
+            key = self.client.insert_translation_for_new_key(namespace_name=stringtable_entry.container_name, key_name=stringtable_entry.key_name, language=stringtable_entry.language, text=stringtable_entry.text)
+            key.refresh()
+            return True
+
+        else:
+            try:
+                result = key[self.get_language(stringtable_entry.language)].update_from_stringtable_entry(stringtable_entry)
+                if result is True:
+                    key.refresh()
+                return result
+            except KeyError:
+                request_data = {"key": key.name,
+                                "namespace": key.namespace.name,
+                                "translations": {self.get_language(stringtable_entry.language).tag: stringtable_entry.text}}
+
+                response = self.client.client.post("/translations", json=request_data)
+                response.close()
+                key.refresh()
+                return True
 
     def __repr__(self) -> str:
 
