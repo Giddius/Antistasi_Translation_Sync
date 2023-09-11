@@ -13,7 +13,7 @@ from pathlib import Path
 from weakref import proxy
 
 # * Third Party Imports --------------------------------------------------------------------------------->
-import dotenv
+
 
 # * Local Imports --------------------------------------------------------------------------------------->
 from antistasi_translation_sync import __version__, get_description
@@ -45,7 +45,7 @@ THIS_FILE_DIR = Path(__file__).parent.absolute()
 
 IN_FILE = THIS_FILE_DIR.joinpath("Stringtable_example_complex.xml")
 
-
+# import dotenv
 # dotenv.load_dotenv(dotenv.find_dotenv("translation_automation.env"))
 
 
