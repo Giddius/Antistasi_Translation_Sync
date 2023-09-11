@@ -34,6 +34,7 @@ exclude = [
     ".editorconfig",
     "planning.todo",
     "tasks.py",
+    "translation_automation.env",
 ]
 [tool.setuptools]
 packages = ["gidapptools"]
