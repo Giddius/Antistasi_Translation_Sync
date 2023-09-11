@@ -17,7 +17,7 @@ from weakref import proxy
 
 # * Local Imports --------------------------------------------------------------------------------------->
 from antistasi_translation_sync import __version__, get_description
-from antistasi_translation_sync.errors import StringtableError
+from antistasi_translation_sync.errors import StringtableError, NoTokenFoundError
 from antistasi_translation_sync.tolgee import TolgeeClient
 from antistasi_translation_sync.stringtable import StringTable, ArmaLanguage, get_and_resolve_stringtable
 from antistasi_translation_sync.configuration import Config
@@ -139,7 +139,7 @@ def main() -> None:
 
     config = Config()
     description = get_description()
-    print(f"{description=}")
+
     cl_parser = get_command_line_parser(version=__version__, description=description)
 
     cl_parser.parse_args(config=config)
@@ -147,11 +147,13 @@ def main() -> None:
     print("")
 
     for target in config.targets:
-        syncer = Syncer(stringtable_file_path=target, config=config)
-        syncer.run()
-        print("---------------------------")
-        print("---------------------------")
-        print("---------------------------")
+        try:
+            syncer = Syncer(stringtable_file_path=target, config=config)
+            syncer.run()
+        except NoTokenFoundError:
+            print(f"NO TOKEN FOUND FOR {target!r}")
+            print(f"skipping {target!r}")
+            continue
 
 
 # region [Main_Exec]
