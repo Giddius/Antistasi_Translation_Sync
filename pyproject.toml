@@ -34,7 +34,6 @@ exclude = [
     ".editorconfig",
     "planning.todo",
     "tasks.py",
-    "antistasi_translation_sync/translation_automation.env",
 ]
 [tool.setuptools]
 packages = ["gidapptools"]
