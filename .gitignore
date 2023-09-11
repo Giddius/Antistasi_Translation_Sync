@@ -141,3 +141,4 @@ dmypy.json
 gidapptools/gid_scribe/markdown/document.py
 /all_dependencies.json
 /project_web_interface.html
+/antistasi_translation_sync/translation_automation.env
