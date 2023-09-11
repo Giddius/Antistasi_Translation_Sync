@@ -151,8 +151,8 @@ def main() -> None:
             syncer = Syncer(stringtable_file_path=target, config=config)
             syncer.run()
         except NoTokenFoundError:
-            print(f"NO TOKEN FOUND FOR {target!r}")
-            print(f"skipping {target!r}")
+            print(f"!!!!!! NO TOKEN FOUND FOR {target!r}")
+            print(f"!!!!!! skipping {target!r}")
             continue
 
 
