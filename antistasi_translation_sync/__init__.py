@@ -3,7 +3,7 @@ WiP
 """
 
 
-__version__ = "0.1.0"
+__version__ = "0.5.0"
 
 
 def get_package_name() -> str:
@@ -16,3 +16,7 @@ def get_pretty_package_name() -> str:
     pretty_name = name.replace("_", " ").title()
 
     return pretty_name
+
+
+def get_description() -> str:
+    return __doc__

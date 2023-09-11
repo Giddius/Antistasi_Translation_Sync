@@ -7,25 +7,23 @@ Soon.
 # region [Imports]
 
 # * Standard Library Imports ---------------------------------------------------------------------------->
-from pathlib import Path
-from time import sleep
-from typing import Union
-import sys
 import os
-from time import sleep
+from typing import Union
+from pathlib import Path
 from weakref import proxy
-from datetime import datetime, UTC, timedelta
-import httpx
-# * Gid Imports ----------------------------------------------------------------------------------------->
+
+# * Third Party Imports --------------------------------------------------------------------------------->
 import dotenv
-from antistasi_translation_sync.stringtable import StringtableParser, get_and_resolve_stringtable, ArmaLanguage, StringTable
-from antistasi_translation_sync.command_line_parser import CommandLineParser, get_command_line_parser
-from antistasi_translation_sync.errors import StringtableError, NoTokenFoundError
-from antistasi_translation_sync.configuration import Config
+
+# * Local Imports --------------------------------------------------------------------------------------->
+from antistasi_translation_sync import __version__, get_description
+from antistasi_translation_sync.errors import StringtableError
 from antistasi_translation_sync.tolgee import TolgeeClient
-from antistasi_translation_sync.tolgee.models import Language, Project
-from antistasi_translation_sync import __version__, get_package_name, get_pretty_package_name
-import argparse
+from antistasi_translation_sync.stringtable import StringTable, ArmaLanguage, get_and_resolve_stringtable
+from antistasi_translation_sync.configuration import Config
+from antistasi_translation_sync.tolgee.models import Project
+from antistasi_translation_sync.command_line_parser import get_command_line_parser
+
 # endregion [Imports]
 
 # region [TODO]
@@ -140,7 +138,9 @@ class Syncer:
 def main() -> None:
 
     config = Config()
-    cl_parser = get_command_line_parser(version=__version__)
+    description = get_description()
+    print(f"{description=}")
+    cl_parser = get_command_line_parser(version=__version__, description=description)
 
     cl_parser.parse_args(config=config)
 

@@ -7,10 +7,7 @@ Soon.
 # region [Imports]
 
 # * Standard Library Imports ---------------------------------------------------------------------------->
-
 from pathlib import Path
-
-# * Type-Checking Imports --------------------------------------------------------------------------------->
 
 # endregion [Imports]
 

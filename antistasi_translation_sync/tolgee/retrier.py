@@ -2,18 +2,12 @@
 # region [Imports]
 
 # * Standard Library Imports ---------------------------------------------------------------------------->
-import os
 from time import sleep
-from typing import Any, Union, Callable, Iterable, Optional, TypeAlias, Protocol
-
+from typing import Any, Union, Callable, Iterable, Protocol, TypeAlias
 from functools import wraps
 
 # * Third Party Imports --------------------------------------------------------------------------------->
-
-
 import httpx
-# * Gid Imports ----------------------------------------------------------------------------------------->
-
 
 # endregion [Imports]
 
