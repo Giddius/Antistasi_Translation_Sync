@@ -48,7 +48,6 @@ class Language:
     originalName: str = dataclasses.field(compare=False, hash=False, repr=False)
     base: bool = dataclasses.field(compare=False, hash=False)
     flagEmoji: str = dataclasses.field(compare=False, hash=False, repr=False)
-    client: Union["TolgeeClient", None] = dataclasses.field(default=None, repr=False, hash=False)
 
     @property
     def language_name(self) -> str:
@@ -68,10 +67,8 @@ class Language:
 
     @classmethod
     def from_response_data(cls,
-                           client: "TolgeeClient" = None,
                            **response_data: Unpack[dict[str, object]]) -> Self:
 
-        client = proxy(client) if client is not None else client
         language_id = response_data["id"]
         name = response_data["name"]
         tag = response_data["tag"]
@@ -79,7 +76,7 @@ class Language:
         base = response_data["base"]
         flag_emoji = response_data["flagEmoji"]
 
-        return cls(language_id=language_id, name=name, tag=tag, originalName=original_name, base=base, flagEmoji=flag_emoji, client=client)
+        return cls(language_id=language_id, name=name, tag=tag, originalName=original_name, base=base, flagEmoji=flag_emoji)
 
     def __str__(self) -> str:
         return self.tag

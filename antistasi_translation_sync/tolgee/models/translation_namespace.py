@@ -48,18 +48,15 @@ class TranslationNamespace:
     __slots__ = ("_namespace_id",
                  "_name",
                  "_project",
-                 "_client",
                  "_key_map")
 
     def __init__(self,
                  namespace_id: int,
                  name: str,
-                 project: "Project",
-                 client: "TolgeeClient") -> None:
+                 project: "Project") -> None:
         self._namespace_id: int = namespace_id
         self._name: str = name
         self._project = project
-        self._client: Union["TolgeeClient", None] = client
         self._key_map: dict[str, "TranslationKey"] = {}
 
     @property
@@ -75,9 +72,9 @@ class TranslationNamespace:
         return self._project
 
     @classmethod
-    def from_response_data(cls, client: "TolgeeClient" = None, **response_data: Unpack[dict[str, object]]) -> Self:
-        client = proxy(client) if client is not None else client
-        return cls(namespace_id=response_data["id"], name=response_data["name"], client=client)
+    def from_response_data(cls, **response_data: Unpack[dict[str, object]]) -> Self:
+
+        return cls(namespace_id=response_data["id"], name=response_data["name"])
 
     def add_key(self, key: "TranslationKey") -> None:
         if key.name in self._key_map:
@@ -90,6 +87,9 @@ class TranslationNamespace:
 
         else:
             del self._key_map[key.name]
+
+        if len(self._key_map) <= 0:
+            self.project.remove_namespace(self)
 
     def __getitem__(self, name: str) -> "TranslationKey":
         return self._key_map[name]

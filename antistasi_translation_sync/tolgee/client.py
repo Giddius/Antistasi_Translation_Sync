@@ -24,7 +24,7 @@ from types import TracebackType
 import httpx
 
 from .models import Tag, Project, Language, ProjectInfo, TranslationKey, TranslationEntry, GeneralProjectData, TranslationNamespace, MachineTranslationProvider, EntryState
-from .rate_limiter import RateLimit, get_rate_limiter
+from .rate_limiter import RateLimit, get_rate_limiter, seconds_until_next_full_minute
 
 # * Type-Checking Imports --------------------------------------------------------------------------------->
 if TYPE_CHECKING:
@@ -185,8 +185,7 @@ class TolgeeClient:
                 key = TranslationKey(key_id=data["keyId"],
                                      name=data["keyName"],
                                      namespace=namespace,
-                                     tags=[project.get_or_create_tag(tag_id=i["id"], tag_name=i["name"]) for i in data["keyTags"]],
-                                     client=self)
+                                     tags=[project.get_or_create_tag(tag_id=i["id"], tag_name=i["name"]) for i in data["keyTags"]])
                 namespace.add_key(key)
 
                 for language_tag, translation_data in data["translations"].items():
@@ -204,8 +203,7 @@ class TolgeeClient:
                                                    mtProvider=translation_data["mtProvider"],
                                                    commentCount=translation_data["commentCount"],
                                                    unresolvedCommentCount=translation_data["unresolvedCommentCount"],
-                                                   fromTranslationMemory=translation_data["fromTranslationMemory"],
-                                                   client=self)
+                                                   fromTranslationMemory=translation_data["fromTranslationMemory"])
                     key.add_entry(translation)
 
             try:
@@ -222,7 +220,7 @@ class TolgeeClient:
         while True:
             response = self.client.get("/languages", params=params)
             response_data = response.json()
-            data += [Language.from_response_data(client=self, **i) for i in response.json()["_embedded"]["languages"]]
+            data += [Language.from_response_data(**i) for i in response.json()["_embedded"]["languages"]]
 
             curr_page = response_data["page"]["number"]
             total_pages = response_data["page"]["totalPages"]
@@ -275,8 +273,7 @@ class TolgeeClient:
                                            mtProvider=translation_data["mtProvider"],
                                            commentCount=translation_data["commentCount"],
                                            unresolvedCommentCount=translation_data["unresolvedCommentCount"],
-                                           fromTranslationMemory=translation_data["fromTranslationMemory"],
-                                           client=self)
+                                           fromTranslationMemory=translation_data["fromTranslationMemory"])
             key.add_entry(translation)
 
     def insert_translation_for_new_key(self, namespace_name: str, key_name: str, language: "LanguageLike", text: str) -> "TranslationKey":
@@ -296,8 +293,7 @@ class TolgeeClient:
         key = TranslationKey(key_id=new_data["keyId"],
                              name=new_data["keyName"],
                              namespace=namespace,
-                             tags=[],
-                             client=self)
+                             tags=[])
         namespace.add_key(key)
 
         return key
@@ -321,6 +317,7 @@ class TolgeeClient:
 
     def connect(self, _from_enter: bool = False) -> Self:
         self.client = self._create_client()
+        # self.rate_limit_spec.force_sleep(value=seconds_until_next_full_minute(max_value=15.0))
 
         if _from_enter is True:
             self.client.__enter__()

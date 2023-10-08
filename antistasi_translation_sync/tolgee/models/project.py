@@ -67,10 +67,27 @@ class NamespaceContainer:
             elif isinstance(key, str):
                 return self._name_map[key]
 
-        except KeyError:
-            pass
+            else:
+                raise KeyError(key)
 
-        raise KeyError(f"No Namespace found for key {key!r} in {self!r}.")
+        except KeyError:
+            raise KeyError(f"No Namespace found for key {key!r} in {self!r}.")
+
+    def __delitem__(self, key: Union[str, int]) -> None:
+        try:
+            if isinstance(key, int):
+                namespace = self._id_map[key]
+            elif isinstance(key, str):
+                namespace = self._name_map[key]
+
+            else:
+                raise KeyError(key)
+
+            self._namespaces.remove(namespace)
+            del self._id_map[namespace.namespace_id]
+            del self._name_map[namespace.name]
+        except KeyError:
+            raise KeyError(f"No Namespace found for key {key!r} in {self!r}.")
 
     def add(self, namespace: "TranslationNamespace") -> None:
         if namespace in self._namespaces:
@@ -84,6 +101,11 @@ class NamespaceContainer:
             return self[key]
         except KeyError:
             return default
+
+    def remove(self, namespace: "TranslationNamespace") -> None:
+        self._namespaces.remove(namespace)
+        del self._id_map[namespace.namespace_id]
+        del self._name_map[namespace.name]
 
 
 class TagContainer:
@@ -192,6 +214,9 @@ class Project:
         self.namespace_container = NamespaceContainer()
         return self.setup()
 
+    def remove_namespace(self, namespace: "TranslationNamespace") -> None:
+        self.namespace_container.remove(namespace)
+
     def language_from_arma_language(self, arma_language: "LanguageLike") -> "Language":
         try:
             return self.get_language_by_name(arma_language.language_name)
@@ -242,7 +267,7 @@ class Project:
         try:
             return self.tag_container._id_map[tag_id]
         except KeyError:
-            tag = Tag(tag_id=tag_id, name=tag_name, client=self.client, project=self)
+            tag = Tag(tag_id=tag_id, name=tag_name, project=self)
             self.add_tag(tag=tag)
             return tag
 
@@ -252,7 +277,7 @@ class Project:
         except KeyError:
             if namespace_id is None:
                 namespace_id = self.client.get_namespace_id_by_name(namespace_name=name)
-            namespace = TranslationNamespace(namespace_id=namespace_id, name=name, project=self, client=self.client)
+            namespace = TranslationNamespace(namespace_id=namespace_id, name=name, project=self)
             self.add_namespace(namespace=namespace)
             return namespace
 

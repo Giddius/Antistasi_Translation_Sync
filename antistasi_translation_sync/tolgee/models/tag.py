@@ -45,17 +45,15 @@ class Tag:
     tag_id: int = dataclasses.field(hash=True, compare=True)
     name: str = dataclasses.field(compare=True)
     project: "Project" = dataclasses.field()
-    client: Union["TolgeeClient", None] = dataclasses.field(default=None, repr=False, hash=False, compare=False)
 
     @classmethod
     def from_response_data(cls,
-                           client: "TolgeeClient" = None,
                            **response_data: Unpack[dict[str, object]]) -> Self:
 
         tag_id = response_data.pop("id")
         name = response_data.pop("name")
 
-        return cls(tag_id=tag_id, name=name, client=client, **response_data)
+        return cls(tag_id=tag_id, name=name, **response_data)
 
 
 # region [Main_Exec]

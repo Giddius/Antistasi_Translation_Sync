@@ -11,7 +11,7 @@ import sys
 from enum import Enum, auto
 from typing import TYPE_CHECKING, Any, Union, Optional
 from pathlib import Path
-
+from .translation_comment import TranslationComment, TranslationCommentAuthor
 if sys.version_info >= (3, 11):
     pass
 else:
@@ -92,7 +92,6 @@ class TranslationEntry:
                  "_commentCount",
                  "_unresolvedCommentCount",
                  "_fromTranslationMemory",
-                 "_client",
                  "_comments")
 
     def __init__(self,
@@ -106,12 +105,11 @@ class TranslationEntry:
                  mtProvider: Union[str, MachineTranslationProvider],
                  commentCount: Optional[int],
                  unresolvedCommentCount: Optional[int],
-                 fromTranslationMemory: bool,
-                 client: Union["TolgeeClient", None] = None) -> None:
+                 fromTranslationMemory: bool) -> None:
         self._entry_id: int = entry_id
         self._key: "TranslationKey" = key
         self._language: "Language" = language
-        self._text: str = text
+        self._text: str = text.rstrip("\n")
         self._state: EntryState = EntryState(state)
         self._outdated: bool = outdated
         self._auto: bool = auto
@@ -119,12 +117,11 @@ class TranslationEntry:
         self._commentCount: Optional[int] = commentCount
         self._unresolvedCommentCount: Optional[int] = unresolvedCommentCount
         self._fromTranslationMemory: bool = fromTranslationMemory
-        self._client: Union["TolgeeClient", None] = client
 
         self._comments: tuple[str] = None
 
     @property
-    def comments(self) -> tuple[str]:
+    def comments(self) -> tuple[TranslationComment]:
         if self._comments is None:
             if self.comment_count <= 0:
                 self._comments = tuple()
@@ -132,12 +129,25 @@ class TranslationEntry:
                 comments = []
 
                 params = {"size": 250}
-                response = self.client.client.get(f"/translations/{self.entry_id}/comments", params=params)
+                response = self.project.client.client.get(f"/translations/{self.entry_id}/comments", params=params)
 
                 data = response.json()["_embedded"]
 
                 for comment_data in data["translationComments"]:
-                    comments.append(comment_data["text"])
+                    comment_author = TranslationCommentAuthor(author_id=comment_data["author"]["id"],
+                                                              username=comment_data["author"]["username"],
+                                                              deleted=comment_data["author"]["deleted"],
+                                                              disabled=comment_data["author"]["disabled"],
+                                                              name=comment_data["author"].get("name"))
+
+                    comment_item = TranslationComment(comment_id=comment_data["id"],
+                                                      entry=self,
+                                                      text=comment_data["text"],
+                                                      state=comment_data["state"],
+                                                      author=comment_author,
+                                                      created_at=comment_data["createdAt"],
+                                                      updated_at=comment_data["updatedAt"])
+                    comments.append(comment_item)
 
                 self._comments = tuple(comments)
 
@@ -227,7 +237,7 @@ class TranslationEntry:
                         "namespace": self.namespace.name,
                         "translations": {self.language.tag: stringtable_entry.text}}
 
-        response = self.client.client.post("/translations", json=request_data)
+        response = self.project.client.client.post("/translations", json=request_data)
         response.close()
 
         return True

@@ -12,7 +12,7 @@ import argparse
 from typing import TYPE_CHECKING, Any, Union, Callable
 from pathlib import Path
 from collections.abc import Callable, Sequence
-
+from . import __version__, get_description
 if sys.version_info >= (3, 11):
     pass
 else:
@@ -67,7 +67,7 @@ class CommandLineParser(argparse.ArgumentParser):
 
         super().__init__(prog=prog,
                          usage=usage,
-                         description=description,
+                         description=description if description is not None else get_description(),
                          epilog=epilog,
                          parents=parents or [],
                          formatter_class=formatter_class,
@@ -79,13 +79,14 @@ class CommandLineParser(argparse.ArgumentParser):
                          allow_abbrev=allow_abbrev,
                          exit_on_error=exit_on_error)
 
-        self.version = version
+        self.version = version if version is not None else __version__
 
     def add_meta_actions(self) -> None:
         if self.version is not None:
             self.add_argument("-v", "--version", action=argparse._VersionAction, version=self.version)
 
     def parse_args(self, args: list[str] = None, config: "Config" = None) -> "Config":
+
         return super().parse_args(args=args, namespace=config).resolve_targets()
 
     def parse_known_args(self, args: list[str] = None, config: "Config" = None) -> "Config":

@@ -72,7 +72,7 @@ class _SubConfig(ABC):
         name = ''.join(f"_{c}" if c.isupper() else c for c in raw_name).strip("_").casefold()
         return name
 
-    def update_from_config(self, config: ConfigParser) -> None:
+    def update_from_ini_config(self, ini_config: ConfigParser) -> None:
         ...
 
 
@@ -116,6 +116,11 @@ class StringtableConfig(_SubConfig):
 
 
 class Config:
+    __slots__ = ("tolgee_config",
+                 "stringtable_config",
+                 "_old_working_dir",
+                 "working_dir",
+                 "targets")
 
     def __init__(self) -> None:
         self.tolgee_config = TolgeeConfig()
@@ -129,11 +134,11 @@ class Config:
     def sub_configs(self) -> tuple[_SubConfig]:
         return tuple(sub_config for _, sub_config in inspect.getmembers_static(self, predicate=lambda x: isinstance(x, _SubConfig)))
 
-    def update_from_config(self, config: ConfigParser) -> None:
+    def update_from_ini_config(self, ini_config: ConfigParser) -> None:
         ...
 
         for sub_config in self.sub_configs:
-            sub_config._update_from_config(config=config)
+            sub_config.update_from_ini_config(ini_config=ini_config)
 
     def resolve_targets(self) -> Self:
         self._old_working_dir = Path.cwd().resolve()
