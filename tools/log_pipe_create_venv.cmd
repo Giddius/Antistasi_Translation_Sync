@@ -66,3 +66,4 @@ if %ERRORLEVEL% == 0 (
 )
 
 
+EXIT /B

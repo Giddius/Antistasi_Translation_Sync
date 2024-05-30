@@ -8,6 +8,7 @@ Soon.
 
 # * Standard Library Imports ---------------------------------------------------------------------------->
 from pathlib import Path
+from typing import Generator
 
 # endregion [Imports]
 
@@ -68,6 +69,18 @@ class TolgeeError(AntistasiTranslationSyncError):
     ...
 
 
+class TolgeeHTTPError(TolgeeError):
+    ...
+
+
+class MaxRetriesReachedError(TolgeeHTTPError):
+    ...
+
+
+class NoRetryStatusError(TolgeeHTTPError):
+    ...
+
+
 class NoTokenFoundError(TolgeeError):
     ...
 
@@ -78,9 +91,5 @@ class TolgeeProjectError(TolgeeError):
 
 # region [Main_Exec]
 if __name__ == '__main__':
-    import inspect
-
-    import pp
-    pp(inspect.getmro(AntistasiTranslationSyncError))
-
+    ...
 # endregion [Main_Exec]

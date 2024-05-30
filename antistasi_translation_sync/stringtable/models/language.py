@@ -11,7 +11,7 @@ import sys
 from enum import Enum
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 from pathlib import Path
-
+import re
 if sys.version_info >= (3, 11):
     pass
 else:
@@ -47,6 +47,9 @@ class LanguageLike(Protocol):
         ...
 
 
+LANGUAGE_NAME_BRACKET_REGEX = re.compile(r"\(.*?\)$")
+
+
 class ArmaLanguage(Enum):
     ORIGINAL = "Original"
     GERMAN = "German"
@@ -61,6 +64,12 @@ class ArmaLanguage(Enum):
     PORTUGUESE = "Portuguese"
     TURKISH = "Turkish"
     CHINESESIMP = "Chinesesimp"
+    UKRAINIAN = "Ukrainian"
+    DUTCH = "Dutch"
+    NORWEGIAN = "Norwegian"
+    SWEDISH = "Swedish"
+    FINNISH = "Finnish"
+    DANISH = "Danish"
 
     @property
     def language_name(self) -> str:
@@ -74,7 +83,7 @@ class ArmaLanguage(Enum):
             pass
 
         if isinstance(value, str):
-            mod_value = value.upper()
+            mod_value = LANGUAGE_NAME_BRACKET_REGEX.sub("", value).strip().upper()
             if mod_value == "ENGLISH":
                 return cls.ORIGINAL
 

@@ -1,4 +1,4 @@
-import zlib
+import gzip
 import importlib.resources as imp_resources
 from typing import Union
 import json
@@ -7,9 +7,13 @@ from functools import cache
 
 def _load_builtin_arma_key_names_from_compressed_data() -> frozenset[str]:
 
-    file = imp_resources.files(__package__).joinpath("builtin_arma_key_names_compressed_data.bin")
-
-    decompressed_data = json.loads(zlib.decompress(file.read_bytes()))
+    file = imp_resources.files(__package__).joinpath("builtin_arma_key_names_compressed_data.gz")
+    decompressed_data = []
+    with gzip.open(file, "rb") as f:
+        for raw_line in f:
+            line = raw_line.decode(encoding='utf-8', errors='ignore').rstrip()
+            if line:
+                decompressed_data.append(line)
 
     # text = decompressed_data.decode(encoding='utf-8', errors='ignore')
 

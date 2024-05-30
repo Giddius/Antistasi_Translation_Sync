@@ -1,5 +1,5 @@
 
-from .general_project_data import GeneralProjectData
+from .general_project_data import GeneralProjectData, ProjectRepository, GeneralOrganizationData
 from .language import Language
 
 from .project_info import ProjectInfo

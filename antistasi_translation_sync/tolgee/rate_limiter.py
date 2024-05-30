@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING, Callable, Optional
 from pathlib import Path
 from threading import Lock
 from collections.abc import Callable
-
+import logging
 
 if sys.version_info >= (3, 11):
     from typing import Self
@@ -46,6 +46,7 @@ if TYPE_CHECKING:
 # region [Constants]
 
 THIS_FILE_DIR = Path(__file__).parent.absolute()
+log = logging.getLogger(__name__)
 
 # endregion [Constants]
 
@@ -110,6 +111,8 @@ class RateLimit:
         self._start_time_5_min = self._time_provider()
 
     def _get_sleep_time(self) -> float:
+        if self._start_time is None:
+            return 0
         used_time = self._time_provider() - self._start_time
 
         sleep_time = max((self.base_sleep_time - used_time), 0.00001)
@@ -119,6 +122,8 @@ class RateLimit:
         return sleep_time
 
     def _get_5_min_sleep_time(self) -> float:
+        if self._start_time is None:
+            return 0
         used_time = self._time_provider() - self._start_time_5_min
 
         sleep_time = max((60 * 5 - used_time), 0.00001)
@@ -132,7 +137,7 @@ class RateLimit:
             return
 
         sleep_amount = self._get_sleep_time()
-        print(f"sleeping {sleep_amount!r}", flush=True)
+        log.debug("sleeping %r s", sleep_amount)
         sleep(sleep_amount)
         self._refill_bucket()
 
@@ -142,14 +147,13 @@ class RateLimit:
             return
 
         sleep_amount = self._get_5_min_sleep_time()
-        print(f"sleeping because of 5 min limit: {sleep_amount!r}", flush=True)
+        log.debug(f"sleeping because of 5 min limit: {sleep_amount!r} s")
         sleep(sleep_amount)
         self._refill_5_min_bucket()
 
     def _random_sleep(self) -> None:
         sleep_amount = (1.0 / (self._rate_fractions / 2)) * random.random()
         sleep(sleep_amount)
-        # print(f"slept randomly for {sleep_amount:.4f}", flush=True)
 
     def consume(self) -> None:
         if self._random_sleep_on_consume is True:
@@ -171,7 +175,7 @@ class RateLimit:
             if value is None:
                 value = self.base_sleep_time
 
-            print(f"sleeping {value:.3f}", flush=True)
+            log.debug(f"sleeping {value:.3f} s")
 
             sleep(value)
 
@@ -208,7 +212,7 @@ def get_rate_limiter(base_url: httpx.URL) -> "RateLimit":
     try:
         return RATE_LIMIT_MANAGER[base_url]
     except KeyError:
-        rate_limit = RateLimit(max_request_amount=300, max_request_amount_5_min=20_000, reset_seconds=70.0, rate_fractions=10, random_sleep_on_consume=True)
+        rate_limit = RateLimit(max_request_amount=500, max_request_amount_5_min=20_000, reset_seconds=65.0, rate_fractions=10, random_sleep_on_consume=False)
 
         RATE_LIMIT_MANAGER[base_url] = rate_limit
 

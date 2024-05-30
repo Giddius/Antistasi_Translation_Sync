@@ -2,7 +2,7 @@ faker
 pytest
 pytest-cov
 pytest-datafiles
-pytest-lazy-fixture
+pytest-lazy-fixtures
 pytest-metadata
 pytest-random-order
 pytest-stress

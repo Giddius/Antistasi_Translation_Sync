@@ -102,6 +102,23 @@ class ProjectInfo:
         return self.tagCount
 
 
+@dataclasses.dataclass(frozen=True, slots=True)
+class PartialProjectInfo:
+    projectId: int = dataclasses.field()
+    projectName: str = dataclasses.field()
+
+    @property
+    def name(self) -> str:
+        return self.projectName
+
+    @property
+    def project_name(self) -> str:
+        return self.projectName
+
+    @property
+    def project_id(self) -> int:
+        return self.projectId
+
 # region [Main_Exec]
 
 

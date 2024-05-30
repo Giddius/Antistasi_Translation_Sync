@@ -10,10 +10,10 @@ Soon.
 import sys
 import xml.etree.ElementTree as ET
 from html import escape as html_escape
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Union
 from pathlib import Path
 
-from .language import ArmaLanguage
+from .language import ArmaLanguage, LanguageLike
 
 if sys.version_info >= (3, 11):
     from typing import Self
@@ -49,15 +49,17 @@ class StringTableEntry:
                  "key")
 
     def __init__(self,
-                 language: "ArmaLanguage",
+                 language: Union["ArmaLanguage", str, "LanguageLike"],
                  text: str) -> None:
-        self.language = language
-        self.text = text
+
+        self.language: "ArmaLanguage" = ArmaLanguage(language)
+        self.text: str = text
         self.key: "StringTableKey" = None
 
     @classmethod
     def from_xml_element(cls, element: ET.Element) -> Self:
         raw_language = element.tag
+
         raw_text = element.text
         instance = cls(language=ArmaLanguage(raw_language), text=raw_text)
 
@@ -72,7 +74,7 @@ class StringTableEntry:
 
     @property
     def html_escaped_text(self) -> str:
-        text = html_escape(self.text.replace("\n", "<br/>"), False)
+        text = html_escape(self.text.replace("\\n", "<br/>").replace("\n", "<br/>"), False)
 
         # text = text.replace(r'\n', r'&lt;br/&gt;')
 

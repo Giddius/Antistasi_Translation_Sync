@@ -203,8 +203,8 @@ class Project:
 
         self.project_info = self.client._get_project_info()
 
-        self.language_map = {l.language_name.casefold(): l for l in self.client.get_available_languages()}
-        self.default_language = next(l for l in self.languages if l.is_default)
+        self.language_map = {lang.language_name.casefold(): lang for lang in self.client.get_available_languages()}
+        self.default_language = next(lang for lang in self.languages if lang.is_default)
 
         self.client._build_project_tree(self)
 
@@ -233,7 +233,7 @@ class Project:
 
     def get_language_by_tag(self, tag: str) -> "Language":
         mod_tag = tag.casefold()
-        language = next((l for l in self.languages if l.tag.casefold() == mod_tag), None)
+        language = next((lang for lang in self.languages if lang.tag.casefold() == mod_tag), None)
         if language is None:
 
             raise KeyError(f"{self!r} has no Language with the tag {tag!r}.")
@@ -252,7 +252,14 @@ class Project:
         raise KeyError(f"No language found for {in_item!r} in {self!r}.")
 
     def get_key_by_name(self, key_name: str) -> "TranslationKey":
-        return ChainMap(*[ns._key_map for ns in self.namespaces])[key_name]
+        for name_space in self.namespaces:
+            try:
+                return name_space._key_map[key_name]
+            except KeyError:
+                continue
+
+        raise KeyError(f"No key with name {key_name!r} found.")
+        # return ChainMap(*[ns._key_map for ns in self.namespaces])[key_name]
 
     def add_namespace(self, namespace: "TranslationNamespace"):
         self.namespace_container.add(namespace)

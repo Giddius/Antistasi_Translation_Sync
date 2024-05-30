@@ -8,10 +8,17 @@ Soon.
 
 # * Standard Library Imports ---------------------------------------------------------------------------->
 import sys
-from typing import TYPE_CHECKING, Union, Optional
+from typing import TYPE_CHECKING, Union, Optional, Callable
 from pathlib import Path
 from datetime import datetime, timezone
-
+from time import sleep
+from httpx._config import DEFAULT_LIMITS, Limits, Proxy
+from httpx._models import Request, Response
+from functools import partial
+import enum
+import re
+from httpx._types import CertTypes, VerifyTypes
+import random
 if sys.version_info >= (3, 11):
     from typing import Self
 else:
@@ -23,9 +30,13 @@ from types import TracebackType
 # * Third Party Imports --------------------------------------------------------------------------------->
 import httpx
 
-from .models import Tag, Project, Language, ProjectInfo, TranslationKey, TranslationEntry, GeneralProjectData, TranslationNamespace, MachineTranslationProvider, EntryState
+from .models import Tag, Project, Language, ProjectInfo, EntryState, TranslationKey, TranslationEntry, GeneralProjectData, GeneralOrganizationData, TranslationNamespace, MachineTranslationProvider, EntryState, ProjectRepository
 from .rate_limiter import RateLimit, get_rate_limiter, seconds_until_next_full_minute
 
+from ..errors import MaxRetriesReachedError, NoRetryStatusError
+
+
+import logging
 # * Type-Checking Imports --------------------------------------------------------------------------------->
 if TYPE_CHECKING:
     from ..stringtable import LanguageLike
@@ -45,14 +56,36 @@ if TYPE_CHECKING:
 # region [Constants]
 
 THIS_FILE_DIR = Path(__file__).parent.absolute()
+log = logging.getLogger(__name__)
 
 # endregion [Constants]
 
 
+class ApiKeyType(enum.Enum):
+    PERSONAL_ACCESS_TOKEN = enum.auto()
+    PROJECT_KEY = enum.auto()
+
+
+def identify_api_key_type(in_token: str) -> ApiKeyType:
+    if in_token.casefold().startswith("tgpat_"):
+        return ApiKeyType.PERSONAL_ACCESS_TOKEN
+
+    if in_token.casefold().startswith("tgpak"):
+        return ApiKeyType.PROJECT_KEY
+
+    raise ValueError("unknown api_key type.")
+
+
 def get_all_projects_data_from_access_token(in_base_url: Union[str, httpx.URL], access_token: str) -> tuple["GeneralProjectData"]:
+    """
+    BROKEN CURRENTLY because of "api_access_forbidden"
+    """
+
+    import pp
+
     TO_REMOVE_PROJECT_DATA_KEYS = {"organizationOwner", "organizationRole", "directPermission", "computedPermission", "baseLanguage"}
 
-    full_url = httpx.URL(in_base_url).join("v2/projects")
+    full_url = httpx.URL(in_base_url).join("/v2/projects")
 
     params = {"page": 0}
     headers = {"X-API-Key": access_token}
@@ -61,10 +94,16 @@ def get_all_projects_data_from_access_token(in_base_url: Union[str, httpx.URL], 
 
     while True:
         response = httpx.get(full_url, headers=headers, params=params)
-        response.raise_for_status()
+        try:
+            response.raise_for_status()
+        except httpx.HTTPError as e:
+            log.error("status_code: %r, text: %r", response.status_code, response.text)
+            raise e
 
         response_data = response.json()
         for _project_data in response_data["_embedded"]["projects"]:
+
+            _organization = GeneralOrganizationData(organization_id=_project_data["organizationOwner"]["id"], name=_project_data["organizationOwner"]["name"], slug=_project_data["organizationOwner"]["slug"], description=_project_data["organizationOwner"]["description"])
             _mod_project_data = {k: v for k, v in _project_data.items() if k not in TO_REMOVE_PROJECT_DATA_KEYS}
             _project_id = _mod_project_data.pop("id")
             _project_url = httpx.URL(_mod_project_data.pop("_links")["self"]["href"], scheme="https")
@@ -84,7 +123,8 @@ def get_all_projects_data_from_access_token(in_base_url: Union[str, httpx.URL], 
                                                         project_url=_project_url,
                                                         description=_project_description,
                                                         avatar_url=_avatar_url,
-                                                        avatar_thumbnail_url=_avatar_thumbnail_url))
+                                                        avatar_thumbnail_url=_avatar_thumbnail_url,
+                                                        organization=_organization))
 
         max_pages = response_data["page"]["totalPages"]
         current_page = response_data["page"]["number"]
@@ -95,6 +135,102 @@ def get_all_projects_data_from_access_token(in_base_url: Union[str, httpx.URL], 
             break
 
     return raw_projects_data
+
+
+def get_project_repository(in_base_url: Union[str, httpx.URL], access_token: str) -> ProjectRepository:
+    repository = ProjectRepository()
+    for project in get_all_projects_data_from_access_token(in_base_url=in_base_url, access_token=access_token):
+        repository.add_project(project=project)
+
+    return repository
+
+
+class CustomTransport(httpx.HTTPTransport):
+
+    def __init__(self,
+                 verify: VerifyTypes = True,
+                 cert: CertTypes | None = None,
+                 http1: bool = True,
+                 http2: bool = False,
+                 limits: Limits = DEFAULT_LIMITS,
+                 trust_env: bool = True,
+                 proxy: Proxy | None = None,
+                 uds: str | None = None,
+                 local_address: str | None = None,
+                 connection_retries: int = 0,
+                 max_error_retries: int = 5,
+                 base_error_sleep_time: float = 2.0) -> None:
+
+        super().__init__(verify=verify,
+                         cert=cert,
+                         http1=http1,
+                         http2=http2,
+                         limits=limits,
+                         trust_env=trust_env,
+                         proxy=proxy,
+                         uds=uds,
+                         local_address=local_address,
+                         retries=connection_retries)
+
+        self.max_error_retries = max_error_retries
+        self.base_error_sleep_time = base_error_sleep_time
+        self._error_retry_code_map: dict[int, Callable[[Request, Response, httpx.HTTPError], float]] = {429: self._on_rate_limited,
+                                                                                                        400: self._dont_retry,
+                                                                                                        401: self._dont_retry,
+                                                                                                        404: self._dont_retry,
+                                                                                                        500: self._dont_retry,
+                                                                                                        000: self._default_retry}
+
+    def _default_retry(self, request: Request, response: Response, error: httpx.HTTPError) -> float:
+        return self.determine_retry_sleep_time(request.retry_number)
+
+    def _on_rate_limited(self, request: Request, response: Response, error: httpx.HTTPError) -> float:
+        try:
+            error_data = response.json()
+            retry_sleep_time = (error_data["retryAfter"] / 1000) * 1.15
+            return retry_sleep_time
+        except Exception as e:
+            log.error(e, exc_info=True)
+            log.critical(f"Encountered Exception {e!r} trying to get error_data {response.content!r}")
+
+        return self.determine_retry_sleep_time(request.retry_number)
+
+    def _dont_retry(self, request: Request, response: Response, error: httpx.HTTPError) -> float:
+        log.error("status_code: %r, text: %r", response.status_code, response.text)
+        raise NoRetryStatusError(f"Unable to retry for status {response.status_code!r} for request {request!r} with params {request.url.params!r} ({response.text}).") from error
+
+        return 0.0
+
+    def determine_retry_sleep_time(self, retry_number: int) -> float:
+        fixed_sleep_time = self.base_error_sleep_time * (self.base_error_sleep_time**(retry_number - 1))
+
+        sleep_time = fixed_sleep_time * (1 + (random.random() / 2))
+        return round(sleep_time, ndigits=3)
+
+    def on_error(self, request: Request, response: Response, error: httpx.HTTPError) -> Response:
+        response.read()
+        retry_sleep_time = self._error_retry_code_map.get(response.status_code, self._error_retry_code_map[0])(request, response, error)
+        log.critical(f"sleeping {retry_sleep_time!r} s, because of {response.status_code!r} {response.text!r} from {request.url!r}.")
+        sleep(retry_sleep_time)
+
+        return self.handle_request(request=request)
+
+    def handle_request(self, request: Request) -> Response:
+        retry_number = getattr(request, "retry_number", 0) + 1
+        setattr(request, "retry_number", retry_number)
+
+        try:
+            response = super().handle_request(request)
+            response.request = request
+
+            response.raise_for_status()
+
+        except httpx.HTTPError as e:
+            if retry_number > self.max_error_retries:
+                raise MaxRetriesReachedError(f"Exhausted all retries ({self.max_error_retries!r}) for request {request!r}.") from e
+            response = self.on_error(request=request, response=response, error=e)
+
+        return response
 
 
 class TolgeeClient:
@@ -132,8 +268,8 @@ class TolgeeClient:
             response.raise_for_status()
         except httpx.HTTPStatusError as e:
             response.read()
-            print(f"{response.text=}", flush=True)
-            print(f"{response.url=}", flush=True)
+            log.error(f"{response.text=}")
+            log.error(f"{response.url=}")
 
             raise e
 
@@ -141,14 +277,17 @@ class TolgeeClient:
         # print(f"{request.url.raw=}")
 
         self.rate_limit_spec.consume()
+        # log.debug("did a request type: %r, url: %r", request.method, request.url)
+        ...
 
     def _create_client(self) -> httpx.Client:
         client = httpx.Client(base_url=self._base_url,
                               headers={"X-API-Key": self._api_key},
                               event_hooks={'response': [self.on_response],
                                            "request": [self.on_request]},
-                              timeout=httpx.Timeout(timeout=30.0),
-                              limits=httpx.Limits(max_connections=1, max_keepalive_connections=1))
+                              timeout=httpx.Timeout(timeout=60.0),
+                              limits=httpx.Limits(max_connections=5, max_keepalive_connections=5),
+                              transport=CustomTransport())
         return client
 
     def _get_project_info(self) -> "ProjectInfo":
@@ -157,19 +296,31 @@ class TolgeeClient:
 
         stats_data = {k: v for k, v in stats_response.json().items() if k not in stats_unwanted_keys}
 
-        info_unwanted_keys = {"userFullName", "id", "scopes", "expiresAt", "username", "description", "permittedLanguageIds"}
-        info_request = self.client.build_request("GET", str(self._base_url).removesuffix("/").removesuffix("/projects") + "/api-keys/current")
+        if re.search(r"\/\d+$", str(self._base_url).removesuffix("/")):
+            info_unwanted_keys = {"userFullName", "id", "scopes", "expiresAt", "username", "description", "permittedLanguageIds", "expiresAt"}
 
-        info_response = self.client.send(info_request)
+            project_id = int(re.search(r"\/(?P<project_id>\d+)$", str(self._base_url).removesuffix("/")).group("project_id"))
+            info_request = self.client.build_request("GET", str(self._base_url).removesuffix("/").rsplit("/", 1)[0], params={"size": 250})
+            info_response = self.client.send(info_request)
 
-        info_data = {k: v for k, v in info_response.json().items() if k not in info_unwanted_keys}
-        info_data["lastUsedAt"] = datetime.fromtimestamp(info_data["lastUsedAt"] / 1000, tz=timezone.utc)
+            _raw_data = [project_data for project_data in info_response.json()["_embedded"]['projects'] if project_data['id'] == project_id][0]
+            info_data = {"projectName": _raw_data["name"], "lastUsedAt": None, "projectId": project_id, }
+
+        else:
+            info_unwanted_keys = {"userFullName", "id", "scopes", "expiresAt", "username", "description", "permittedLanguageIds", "expiresAt"}
+
+            info_request = self.client.build_request("GET", str(self._base_url).removesuffix("/").removesuffix("/projects") + "/api-keys/current")
+
+            info_response = self.client.send(info_request)
+
+            info_data = {k: v for k, v in info_response.json().items() if k not in info_unwanted_keys}
+            info_data["lastUsedAt"] = datetime.fromtimestamp(info_data["lastUsedAt"] / 1000, tz=timezone.utc)
         return ProjectInfo(**(stats_data | info_data))
 
     def _build_project_tree(self, project: "Project") -> None:
 
-        params = {"languages": [l.tag for l in project.language_map.values()],
-                  "size": 75
+        params = {"languages": [lang.tag for lang in project.language_map.values()],
+                  "size": 50
                   }
 
         while True:
@@ -230,6 +381,21 @@ class TolgeeClient:
 
             params["page"] += 1
         return tuple(data)
+
+    def set_outdated_for_translation_entry(self, translation: "TranslationEntry", value: bool):
+        encoded_value = "true" if value is True else "false"
+        response = self.client.put(f"/translations/{translation.entry_id}/set-outdated-flag/{encoded_value}")
+        response.raise_for_status()
+        translation._outdated = value
+
+        return translation
+
+    def set_state_for_translation_entry(self, translation: "TranslationEntry", state: EntryState):
+
+        response = self.client.put(f"/translations/{translation.entry_id}/set-state/{state.name.upper()}")
+        response.raise_for_status()
+        translation._state = state
+        return response.json()
 
     def set_tag_for_key(self, key: "TranslationKey", tag_name: str) -> "Tag":
         response = self.client.put(f"/keys/{key.key_id}/tags", json={"name": tag_name})
@@ -298,8 +464,28 @@ class TolgeeClient:
 
         return key
 
+    def insert_multiple_translation_for_new_key(self, namespace_name: str, key_name: str, translations: dict["LanguageLike", str]) -> "TranslationKey":
+        translations = {self.project.get_language(k).tag: v for k, v in translations.items()}
+
+        request_data = {"key": key_name,
+                        "namespace": namespace_name,
+                        "translations": translations}
+
+        response = self.client.post("/translations", json=request_data)
+
+        new_data = response.json()
+
+        namespace = self.project.get_or_create_namespace(name=new_data["keyNamespace"])
+        key = TranslationKey(key_id=new_data["keyId"],
+                             name=new_data["keyName"],
+                             namespace=namespace,
+                             tags=[])
+        namespace.add_key(key)
+
+        return key
+
     def get_namespace_id_by_name(self, namespace_name: str) -> int:
-        response = self.client.get(f"/namespace-by-name/{namespace_name}")
+        response = self.client.get(httpx.URL(f"/namespace-by-name/{namespace_name}"), params={})
 
         return response.json()["id"]
 

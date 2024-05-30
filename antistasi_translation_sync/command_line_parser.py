@@ -101,6 +101,7 @@ def get_command_line_parser(**kwargs) -> CommandLineParser:
     parser.add_argument("targets", type=_resolve_target_type, nargs="+")
 
     parser.add_argument("--token-suffix", "-t", type=str, dest="tolgee_config.api_project_token_suffix", metavar="", required=False, default=argparse.SUPPRESS)
+    parser.add_argument("--api-token", "-a", type=str, dest="tolgee_config.api_project_token_suffix", metavar="", required=False, default=argparse.SUPPRESS)
     parser.add_argument("--indentation", "-i", type=int, dest="stringtable_config.indentation", metavar="", default=argparse.SUPPRESS)
 
     return parser

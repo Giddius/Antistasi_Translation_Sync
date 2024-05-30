@@ -1,6 +1,6 @@
 import pytest
 from pytest import param
-from pytest_lazyfixture import lazy_fixture
+from pytest_lazy_fixtures import lf
 from typing import TYPE_CHECKING
 from antistasi_translation_sync.stringtable import StringTable, StringtableParser, StringTableKey, StringTableEntry, StringTableContainer, ArmaLanguage, LanguageLike
 from contextlib import nullcontext
@@ -10,9 +10,9 @@ if TYPE_CHECKING:
     from .conftest import StringtableObjExpectedResult
 
 
-test_stringtable_obj_params = [param(lazy_fixture("parsed_simple_stringtable"), lazy_fixture("simple_stringtable_expected_result"), id="simple"),
-                               param(lazy_fixture("parsed_intermediate_stringtable"), lazy_fixture("intermediate_stringtable_expected_result"), id="intermediate"),
-                               param(lazy_fixture("parsed_complex_stringtable"), lazy_fixture("complex_stringtable_expected_result"), id="complex")]
+test_stringtable_obj_params = [param(lf("parsed_simple_stringtable"), lf("simple_stringtable_expected_result"), id="simple"),
+                               param(lf("parsed_intermediate_stringtable"), lf("intermediate_stringtable_expected_result"), id="intermediate"),
+                               param(lf("parsed_complex_stringtable"), lf("complex_stringtable_expected_result"), id="complex")]
 
 
 @pytest.mark.parametrize(["parsed_stringtable", "expected_result"], test_stringtable_obj_params)

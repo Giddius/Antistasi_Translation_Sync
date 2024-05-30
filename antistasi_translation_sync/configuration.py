@@ -90,13 +90,17 @@ class WebhookConfig(_SubConfig):
 
 class TolgeeConfig(_SubConfig):
     __slots__ = ("base_url",
-                 "api_project_token_suffix")
+                 "api_project_token_suffix",
+                 "api_token")
 
     def __init__(self) -> None:
         self.base_url: str = None
         self.api_project_token_suffix: str = "TOLGEE_API_TOKEN"
+        self.api_token: str = None
 
     def get_tolgee_api_project_token(self, project_name: str) -> str:
+        if self.api_token is not None:
+            return self.api_token
         env_name = f"{project_name}_{self.api_project_token_suffix}".upper()
         try:
             return os.environ[env_name]

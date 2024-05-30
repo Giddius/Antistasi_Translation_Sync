@@ -65,6 +65,10 @@ class Language:
     def is_default(self) -> str:
         return self.base
 
+    @property
+    def has_valid_language_id(self) -> bool:
+        return self.language_id != -1 and self.language_id >= 0
+
     @classmethod
     def from_response_data(cls,
                            **response_data: Unpack[dict[str, object]]) -> Self:
@@ -77,6 +81,12 @@ class Language:
         flag_emoji = response_data["flagEmoji"]
 
         return cls(language_id=language_id, name=name, tag=tag, originalName=original_name, base=base, flagEmoji=flag_emoji)
+
+    def to_data(self) -> dict[str, str]:
+        return {"name": self.name,
+                "originalName": self.original_name,
+                "tag": self.tag,
+                "flagEmoji": self.flag_emoji}
 
     def __str__(self) -> str:
         return self.tag

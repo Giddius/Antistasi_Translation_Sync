@@ -11,8 +11,9 @@ import os
 import re
 import sys
 import xml.etree.ElementTree as ET
-from typing import TYPE_CHECKING, Union, TextIO
+from typing import TYPE_CHECKING, Any, Union, TextIO
 from pathlib import Path
+from xml.etree.ElementTree import Element
 
 from .models import StringTable, StringTableKey, StringTableEntry, StringTableContainer
 
@@ -86,10 +87,13 @@ class StringtableParser:
             self._stringtable_obj.package_name = package_name
 
     def _handle_entry(self, entry_element: ET.Element, key: "StringTableKey") -> None:
+        if entry_element.tag.casefold() == "chinese":
+            return
         entry = StringTableEntry.from_xml_element(entry_element)
         key.add_entry(entry)
 
     def _handle_key(self, key_element: ET.Element, container: "StringTableContainer") -> None:
+
         key = StringTableKey.from_xml_element(key_element)
         container.add_key(key)
         for _entry in key_element.iter():
@@ -99,11 +103,17 @@ class StringtableParser:
             self._handle_entry(entry_element=_entry, key=key)
 
     def _handle_container(self, container_element: ET.Element) -> None:
+
         container = StringTableContainer.from_xml_element(container_element)
         self._stringtable_obj.add_container(container)
 
         for _key in container_element.iter("Key"):
+
             self._handle_key(key_element=_key, container=container)
+
+    def _create_xml_parser(self) -> ET.XMLParser:
+        parser = ET.XMLParser(target=ET.TreeBuilder())
+        return parser
 
     def clear(self) -> None:
         self._stringtable_obj = None
@@ -112,7 +122,7 @@ class StringtableParser:
     def parse_text(self, text: str) -> "StringTable":
         self.clear()
         self._stringtable_obj = StringTable()
-        self._root = ET.fromstring(text)
+        self._root = ET.fromstring(text, parser=self._create_xml_parser())
 
         self._resolve_header_from_text(text)
 
@@ -128,7 +138,7 @@ class StringtableParser:
         self.clear()
 
         self._stringtable_obj = StringTable()
-        self._root = ET.parse(file_obj).getroot()
+        self._root = ET.parse(file_obj, parser=self._create_xml_parser()).getroot()
 
         self._resolve_header_from_file_obj(file_obj=file_obj)
 

@@ -122,7 +122,10 @@ class StringTableKey:
 
     def add_entry(self, entry: "StringTableEntry") -> None:
         if entry.language in self.entry_map:
-            raise DuplicateEntryError(entry, self, self.container, self.container.string_table)
+            if self.entry_map[entry.language].text.strip() != entry.text.strip():
+                print(f"duplicate language {entry.language!r} for key {self.name!r} with value {entry.text!r} existing value: {self.entry_map[entry.language].text!r}")
+            return
+        #     raise DuplicateEntryError(entry, self, self.container, self.container.string_table)
         entry.set_key(self)
         self.entry_map[entry.language] = entry
 

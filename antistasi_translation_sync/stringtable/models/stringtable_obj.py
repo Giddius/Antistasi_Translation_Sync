@@ -122,7 +122,8 @@ class StringTable:
 
     def add_container(self, container: "StringTableContainer") -> None:
         if container.name in self.container_map:
-            raise DuplicateContainerError(container, self)
+            # raise DuplicateContainerError(container, self)
+            return
         container.set_string_table(self)
         self.container_map[container.name] = container
 

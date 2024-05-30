@@ -242,6 +242,12 @@ class TranslationEntry:
 
         return True
 
+    # def __str__(self) -> str:
+    #     return self.name
+
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}(entry_id={self.entry_id!r}, key={self.key.name}, namespace={self.namespace.name!r}, language={self.language.name!r})"
+
 
 # region [Main_Exec]
 if __name__ == '__main__':
