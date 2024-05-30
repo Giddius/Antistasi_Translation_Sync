@@ -14,7 +14,7 @@ from pathlib import Path
 from datetime import datetime
 from itertools import chain
 from collections import ChainMap
-
+import httpx
 if sys.version_info >= (3, 11):
     from typing import Self
 else:
@@ -26,7 +26,7 @@ from .project_info import ProjectInfo
 from .translation_key import TranslationKey
 from .translation_entry import TranslationEntry
 from .translation_namespace import TranslationNamespace
-
+from antistasi_translation_sync.constants import FALLBACK_NAMESPACE_NAME
 # * Type-Checking Imports --------------------------------------------------------------------------------->
 if TYPE_CHECKING:
     from ..client import TolgeeClient
@@ -263,8 +263,13 @@ class Project:
             key = None
 
         if key is None:
-            key = self.client.insert_translation_for_new_key(namespace_name=stringtable_entry.container_name, key_name=stringtable_entry.key_name, language=stringtable_entry.language, text=stringtable_entry.text)
-            key.refresh()
+            try:
+                key = self.client.insert_translation_for_new_key(namespace_name=stringtable_entry.container_name, key_name=stringtable_entry.key_name, language=stringtable_entry.language, text=stringtable_entry.text)
+                key.refresh()
+            except httpx.HTTPError as e:
+                key = self.client.insert_translation_for_new_key(namespace_name=FALLBACK_NAMESPACE_NAME, key_name=stringtable_entry.key_name, language=stringtable_entry.language, text=stringtable_entry.text)
+                key.refresh()
+
             return True
 
         else:

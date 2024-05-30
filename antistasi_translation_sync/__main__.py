@@ -23,6 +23,7 @@ from antistasi_translation_sync.stringtable import StringTable, ArmaLanguage, ge
 from antistasi_translation_sync.configuration import Config
 from antistasi_translation_sync.tolgee.models import Project
 from antistasi_translation_sync.command_line_parser import get_command_line_parser
+from antistasi_translation_sync.constants import FALLBACK_NAMESPACE_NAME
 
 # endregion [Imports]
 
@@ -66,7 +67,8 @@ class Syncer:
 
             # if translation_key.is_deleted:
             #     continue
-
+            if translation_key.namespace.name == FALLBACK_NAMESPACE_NAME:
+                continue
             try:
                 stringtable_key = self.stringtable.get_key(translation_key.name)
                 if translation_key.namespace.name != stringtable_key.container.name:
