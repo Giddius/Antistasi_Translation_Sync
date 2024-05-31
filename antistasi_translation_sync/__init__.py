@@ -3,7 +3,7 @@ WiP
 """
 
 
-__version__ = "0.6.0"
+__version__ = "0.6.1"
 
 
 def get_package_name() -> str:

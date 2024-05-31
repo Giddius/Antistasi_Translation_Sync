@@ -91,6 +91,7 @@ class Syncer:
 
     def _sync_original_online_translation(self) -> None:
         for stringtable_key in self.stringtable.iter_keys():
+            print(f"    syncing original to online for key: {stringtable_key.name!r}", flush=True)
             original_text = stringtable_key.original_text
             was_updated = self.tolgee_project.update_or_create_from_stringtable_entry(stringtable_entry=stringtable_key.original_entry)
             if was_updated:
@@ -98,6 +99,7 @@ class Syncer:
 
     def _sync_online_translations_to_stringtable(self) -> None:
         for stringtable_key in self.stringtable.iter_keys():
+            print(f"    syncing online translation to stringtable for key: {stringtable_key.name!r}", flush=True)
             translation_key = self.tolgee_project.get_key_by_name(stringtable_key.name)
             stringtable_key.remove_all_not_original_entries()
             for translation_entry in (_entry for _entry in translation_key._entry_map.values() if ArmaLanguage(_entry.language) is not ArmaLanguage.ORIGINAL):
@@ -149,6 +151,7 @@ def main() -> None:
     print("")
 
     for target in config.targets:
+        print(f"Working on file {target.as_posix()!r}", flush=True)
         try:
             syncer = Syncer(stringtable_file_path=target, config=config)
             syncer.run()

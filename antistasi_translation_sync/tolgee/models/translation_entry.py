@@ -111,7 +111,7 @@ class TranslationEntry:
         self._entry_id: int = entry_id
         self._key: "TranslationKey" = key
         self._language: "Language" = language
-        self._text: str = text
+        self._text: str = text.rstrip("\n")
         self._state: EntryState = EntryState(state)
         self._outdated: bool = outdated
         self._auto: bool = auto

@@ -72,7 +72,7 @@ class StringTableEntry:
 
     @property
     def html_escaped_text(self) -> str:
-        text = html_escape(self.text, False)
+        text = html_escape(self.text.replace("\\n", "<br/>").replace("\n", "<br/>"), False)
 
         # text = text.replace(r'\n', r'&lt;br/&gt;')
 
